@@ -1,6 +1,6 @@
 const PRICE_QUALITY_VERSION = '2026-06-24-chauss-service-price-quality';
 const UI_POLISH_VERSION = '2026-06-06-header-footer-polish';
-const WORKFLOW_PAGE_URL = 'https://github.com/badr-spacefoot/chauss-service-feed-api/actions/workflows/generate-feed.yml';
+const WORKFLOW_PAGE_URL = 'https://github.com/badr-spacefoot/chauss-service-feed-API/actions/workflows/generate-feed.yml';
 let workflowButtonTimer = null;
 
 function hasValidMsrp(row) {

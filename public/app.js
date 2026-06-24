@@ -1,5 +1,5 @@
 const DASHBOARD_VERSION = '2026-06-24-chauss-service-api-quality';
-const ACTIONS_WORKFLOW_RUNS_URL = 'https://api.github.com/repos/badr-spacefoot/chauss-service-feed-api/actions/workflows/generate-feed.yml/runs?branch=main&per_page=1';
+const ACTIONS_WORKFLOW_RUNS_URL = 'https://api.github.com/repos/badr-spacefoot/chauss-service-feed-API/actions/workflows/generate-feed.yml/runs?branch=main&per_page=1';
 const REQUIRED_FIELDS = ['variant_sku', 'price_amount', 'product_type'];
 const EURO = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' });
 const INT = new Intl.NumberFormat('en-US');
