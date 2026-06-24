@@ -1,0 +1,19 @@
+{
+  "name": "chauss-service-feed-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GitHub Pages and GitHub Actions generator for the Chauss Service API CSV feed.",
+  "type": "module",
+  "scripts": {
+    "generate": "node scripts/generate-feed.mjs",
+    "verify": "node verify-chauss-service.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "csv-stringify": "^6.5.2",
+    "dotenv": "^16.4.7"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

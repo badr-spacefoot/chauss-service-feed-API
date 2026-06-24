@@ -1,0 +1,64 @@
+name: Generate Chauss Service feed
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/generate-feed.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'public/**'
+      - 'scripts/**'
+      - 'src/**'
+  schedule:
+    - cron: '0 6 * * *'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  generate-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate feed.csv
+        run: npm run generate
+        env:
+          CHAUSS_SERVICE_BASE_URL: ${{ secrets.CHAUSS_SERVICE_BASE_URL }}
+          CHAUSS_SERVICE_API_KEY: ${{ secrets.CHAUSS_SERVICE_API_KEY }}
+          CHAUSS_SERVICE_CONCURRENCY: ${{ secrets.CHAUSS_SERVICE_CONCURRENCY }}
+          FEED_BRAND: Chauss Service
+          FEED_CURRENCY: EUR
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
