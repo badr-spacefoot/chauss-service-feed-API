@@ -28,7 +28,7 @@
         </div>
         <div class="hero-actions">
           <button id="themeToggle" class="button secondary" type="button">Dark mode</button>
-          <a class="button primary" href="feed.csv" download>Download CSV</a>
+          <a id="downloadCsvButton" class="button primary" href="feed.csv" download>Download CSV</a>
           <button id="refreshButton" class="button secondary" type="button">Refresh data</button>
         </div>
       </header>
@@ -173,8 +173,14 @@
           </article>
         </section>
 
-        <section class="panel">
-          <div class="panel-heading"><h2>Catalog Search</h2><p>Filter, sort, and inspect variants</p></div>
+        <section class="panel catalog-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Catalog Search</h2>
+              <p>Filter, sort, and inspect variants</p>
+            </div>
+            <span id="resultCount" class="filter-summary">Loading catalog...</span>
+          </div>
           <div class="filters catalog-controls">
             <label>Search<input id="searchInput" type="search" placeholder="SKU, title, barcode..." /></label>
             <label>Brand<select id="brandFilter"><option value="">All brands</option></select></label>
@@ -189,7 +195,22 @@
             <label>Rows<select id="pageSizeSelect"><option value="25">25 rows</option><option value="50">50 rows</option><option value="100" selected>100 rows</option><option value="250">250 rows</option><option value="all">All rows</option></select></label>
           </div>
           <div class="catalog-mode-row">
-            <label class="toggle-control"><input id="groupProductsToggle" type="checkbox" /> <span>Group by product ID</span></label>
+            <label class="switch-control">
+              <input id="groupProductsToggle" type="checkbox" />
+              <span class="switch-track" aria-hidden="true"><span></span></span>
+              <span class="switch-copy">
+                <strong>Group by product</strong>
+                <small>Show colors and sizes under each product</small>
+              </span>
+            </label>
+            <div class="formula-badge"><span>SKU</span>product_id from Chauss Service</div>
+          </div>
+          <div class="active-filter-row">
+            <div id="activeFilters" class="active-filters" aria-live="polite"></div>
+            <div class="filter-actions">
+              <button id="clearFiltersButton" class="button compact ghost" type="button">Clear filters</button>
+              <button id="exportFilteredButton" class="button compact ghost" type="button">Export filtered CSV</button>
+            </div>
           </div>
           <p id="filterSummary" class="filter-summary">Loading catalog...</p>
           <div class="table-wrap catalog-table">
