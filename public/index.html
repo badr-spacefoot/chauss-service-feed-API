@@ -44,32 +44,32 @@
         </section>
 
         <section class="kpi-grid" aria-label="Catalog KPIs">
-          <article class="kpi-card"><span>Products in view</span><strong id="totalProducts">-</strong></article>
-          <article class="kpi-card"><span>Variants in view</span><strong id="totalVariants">-</strong></article>
-          <article class="kpi-card"><span>Pack variants</span><strong id="activeVariants">-</strong></article>
-          <article class="kpi-card"><span>Average cost</span><strong id="draftVariants">-</strong></article>
-          <article class="kpi-card"><span>Total available stock</span><strong id="totalStock">-</strong></article>
-          <article class="kpi-card"><span>Variants with stock</span><strong id="variantsWithStock">-</strong></article>
-          <article class="kpi-card"><span>Average MSRP</span><strong id="badEans">-</strong></article>
-          <article class="kpi-card score"><span>Feed quality score</span><strong id="qualityScore">-</strong></article>
+          <article class="kpi-card"><span>Products</span><strong id="totalProducts">-</strong></article>
+          <article class="kpi-card"><span>Variants</span><strong id="totalVariants">-</strong></article>
+          <article class="kpi-card"><span>Total stock</span><strong id="totalStock">-</strong></article>
+          <article class="kpi-card"><span>Out of stock</span><strong id="outOfStockVariants">-</strong></article>
+          <article class="kpi-card"><span>Fully out products</span><strong id="fullyOutProducts">-</strong></article>
+          <article class="kpi-card"><span>Pricing alerts</span><strong id="pricingAlertsCount">-</strong></article>
+          <article class="kpi-card"><span>Pack variants</span><strong id="packVariants">-</strong></article>
+          <article class="kpi-card score"><span>Ready for import</span><strong id="readyForImport">-</strong></article>
         </section>
 
         <section class="dashboard-grid charts-grid" aria-label="Catalog charts">
           <article class="panel chart-panel"><div class="panel-heading"><h2>Brand Mix</h2><p>Variants by brand</p></div><canvas id="statusChart"></canvas></article>
           <article class="panel chart-panel"><div class="panel-heading"><h2>Stock by product type</h2><p>Available units by category</p></div><canvas id="stockTypeChart"></canvas></article>
-          <article class="panel chart-panel"><div class="panel-heading"><h2>Cost Distribution</h2><p>Variant cost in EUR</p></div><canvas id="priceChart"></canvas></article>
+          <article class="panel chart-panel"><div class="panel-heading"><h2>Pricing Health</h2><p>Cost / MSRP validation</p></div><canvas id="priceChart"></canvas></article>
           <article class="panel chart-panel"><div class="panel-heading"><h2>Usage Mix</h2><p>Variants by intended use</p></div><canvas id="missingChart"></canvas></article>
         </section>
 
         <section class="dashboard-grid two-column">
           <article class="panel">
-            <div class="panel-heading"><h2>Stock Watch</h2><p>Products that need stock attention</p></div>
+            <div class="panel-heading"><h2>Stock Alerts</h2><p>Products and variants that need replenishment attention</p></div>
             <div class="table-wrap small-table"><table><thead><tr><th>Product</th><th>Brand</th><th>Stock</th><th>Out variants</th></tr></thead><tbody id="stockWatchBody"><tr><td colspan="4">Loading...</td></tr></tbody></table></div>
           </article>
 
           <article class="panel">
-            <div class="panel-heading"><h2>Brand Breakdown</h2><p>Variants, stock, and average cost by brand</p></div>
-            <div class="table-wrap small-table"><table><thead><tr><th>Brand</th><th>Variants</th><th>Stock</th><th>Avg cost</th></tr></thead><tbody id="brandBody"><tr><td colspan="4">Loading...</td></tr></tbody></table></div>
+            <div class="panel-heading"><h2>Pricing Alerts</h2><p>Variants where cost is missing or above MSRP</p></div>
+            <div class="table-wrap small-table"><table><thead><tr><th>SKU</th><th>Product</th><th>Unit cost</th><th>Unit MSRP</th><th>Issue</th></tr></thead><tbody id="pricingAlertsBody"><tr><td colspan="5">Loading...</td></tr></tbody></table></div>
           </article>
         </section>
 
@@ -115,19 +115,19 @@
             <article class="trend-card"><span>Products delta</span><strong id="deltaProducts">-</strong></article>
             <article class="trend-card"><span>Variants delta</span><strong id="deltaVariants">-</strong></article>
             <article class="trend-card"><span>Stock delta</span><strong id="deltaStock">-</strong></article>
-            <article class="trend-card"><span>Quality delta</span><strong id="deltaQuality">-</strong></article>
+            <article class="trend-card"><span>Ready delta</span><strong id="deltaQuality">-</strong></article>
           </div>
           <div class="history-layout">
             <div class="history-chart"><canvas id="historyChart"></canvas></div>
             <div class="table-wrap history-table">
-              <table><thead><tr><th>Date</th><th>Products</th><th>Variants</th><th>Stock</th><th>Quality</th></tr></thead><tbody id="historyBody"><tr><td colspan="5">Loading...</td></tr></tbody></table>
+              <table><thead><tr><th>Date</th><th>Products</th><th>Variants</th><th>Stock</th><th>Ready</th></tr></thead><tbody id="historyBody"><tr><td colspan="5">Loading...</td></tr></tbody></table>
             </div>
           </div>
         </section>
 
         <section class="dashboard-grid two-column">
           <article class="panel">
-            <div class="panel-heading"><h2>Feed Quality</h2><p>Required field completeness, price, and EAN validation</p></div>
+            <div class="panel-heading"><h2>Import Readiness</h2><p>Required field completeness, pricing, stock, and EAN validation</p></div>
             <div class="quality-list">
               <div><span>Missing barcode</span><strong id="missingBarcode">-</strong></div>
               <div><span>Bad EAN barcode</span><strong id="badEansDetail">-</strong></div>
@@ -139,12 +139,14 @@
               <div><span>Negative stock variants</span><strong id="negativeStock">-</strong></div>
               <div><span>Out of stock variants</span><strong id="outOfStockDetail">-</strong></div>
               <div><span>Missing product type</span><strong id="missingProductType">-</strong></div>
+              <div><span>Cost above MSRP</span><strong id="costAboveMsrp">-</strong></div>
+              <div><span>Missing MSRP</span><strong id="missingMsrp">-</strong></div>
             </div>
           </article>
 
           <article class="panel">
-            <div class="panel-heading"><h2>Recent Updates</h2><p>Last 10 updated products / variants</p></div>
-            <div class="table-wrap small-table"><table><thead><tr><th>Updated</th><th>SKU</th><th>Brand</th><th>Product</th><th>Stock</th></tr></thead><tbody id="recentUpdatesBody"><tr><td colspan="5">Loading...</td></tr></tbody></table></div>
+            <div class="panel-heading"><h2>Audience Breakdown</h2><p>Variants and stock by age and gender</p></div>
+            <div class="table-wrap small-table"><table><thead><tr><th>Audience</th><th>Variants</th><th>Stock</th><th>Avg cost</th></tr></thead><tbody id="audienceBody"><tr><td colspan="4">Loading...</td></tr></tbody></table></div>
           </article>
         </section>
 
@@ -160,9 +162,15 @@
           </article>
         </section>
 
-        <section class="panel">
-          <div class="panel-heading"><h2>Top Product Types</h2><p>Variant count, stock, and average cost</p></div>
-          <div class="table-wrap"><table><thead><tr><th>Product type</th><th>Variants</th><th>Total stock</th><th>Average cost</th></tr></thead><tbody id="productTypesBody"><tr><td colspan="4">Loading...</td></tr></tbody></table></div>
+        <section class="dashboard-grid two-column">
+          <article class="panel">
+            <div class="panel-heading"><h2>Brand Breakdown</h2><p>Variants, stock, and average cost by brand</p></div>
+            <div class="table-wrap"><table><thead><tr><th>Brand</th><th>Variants</th><th>Total stock</th><th>Average cost</th></tr></thead><tbody id="brandBody"><tr><td colspan="4">Loading...</td></tr></tbody></table></div>
+          </article>
+          <article class="panel">
+            <div class="panel-heading"><h2>Top Product Types</h2><p>Variant count, stock, and average cost</p></div>
+            <div class="table-wrap"><table><thead><tr><th>Product type</th><th>Variants</th><th>Total stock</th><th>Average cost</th></tr></thead><tbody id="productTypesBody"><tr><td colspan="4">Loading...</td></tr></tbody></table></div>
+          </article>
         </section>
 
         <section class="panel">
@@ -176,6 +184,7 @@
             <label>Gender<select id="genderFilter"><option value="">All genders</option></select></label>
             <label>Age<select id="ageFilter"><option value="">All ages</option></select></label>
             <label>Usage<select id="usageFilter"><option value="">All usages</option></select></label>
+            <label>Pricing<select id="pricingFilter"><option value="">All pricing</option><option value="ready">Ready</option><option value="alert">Alerts only</option><option value="cost-above-msrp">Cost above MSRP</option><option value="missing-price">Missing price</option></select></label>
             <label>Pack<select id="packFilter"><option value="">All variants</option><option value="pack">Packs only</option><option value="single">Singles only</option></select></label>
             <label>Rows<select id="pageSizeSelect"><option value="25">25 rows</option><option value="50">50 rows</option><option value="100" selected>100 rows</option><option value="250">250 rows</option><option value="all">All rows</option></select></label>
           </div>

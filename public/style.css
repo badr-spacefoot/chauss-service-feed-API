@@ -104,7 +104,7 @@ h1 { font-size: clamp(2rem, 4vw, 4rem); letter-spacing: 0; line-height: .95; mar
 .quality-list strong { font-size: 1.25rem; }
 .table-wrap { border: 1px solid var(--border); border-radius: 8px; overflow: auto; }
 table { border-collapse: collapse; min-width: 760px; width: 100%; }
-.catalog-table table { min-width: 1120px; }
+.catalog-table table { min-width: 1380px; }
 .small-table table { min-width: 620px; }
 .movement-table table { min-width: 560px; }
 th, td { border-bottom: 1px solid var(--border); padding: 13px 14px; text-align: left; vertical-align: middle; }
@@ -121,7 +121,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--primary) 7%, transparent);
 .product-link { color: var(--link); font-weight: 900; text-decoration: none; }
 .product-link:hover { text-decoration: underline; }
 .filters { display: grid; gap: 14px; grid-template-columns: 1.4fr repeat(3, 1fr); margin-bottom: 12px; }
-.catalog-controls { grid-template-columns: minmax(220px, 1.4fr) repeat(5, minmax(140px, 1fr)); }
+.catalog-controls { grid-template-columns: minmax(220px, 1.4fr) repeat(auto-fit, minmax(140px, 1fr)); }
 .catalog-mode-row { align-items: center; display: flex; gap: 12px; margin: 0 0 12px; }
 .toggle-control { align-items: center; background: var(--surface-soft); border: 1px solid var(--border); border-radius: 8px; color: var(--ink); display: inline-flex; gap: 10px; letter-spacing: 0; padding: 10px 12px; text-transform: none; width: max-content; }
 .toggle-control input { accent-color: var(--primary); height: 18px; width: 18px; }

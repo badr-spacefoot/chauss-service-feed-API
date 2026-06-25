@@ -18,7 +18,6 @@ const state = {
   sort: { key: 'stock', direction: 'desc' },
   pageSize: 100,
   groupProducts: false,
-  statusScope: 'ACTIVE',
   timeRange: { preset: 'last-30-days', customFrom: '', customTo: '' }
 };
 let feedStatusTimer = null;
@@ -40,7 +39,6 @@ window.addEventListener('DOMContentLoaded', () => {
   bindFilters();
   bindSorting();
   bindGroupedRows();
-  bindStatusScope();
   bindTimeRange();
   el('refreshButton').addEventListener('click', loadDashboard);
   loadDashboard();
@@ -196,6 +194,8 @@ function normalizeRow(row) {
   normalized.cost = toNumber(normalized.cost_amount || normalized.price_amount);
   normalized.price = normalized.cost;
   normalized.msrp = toNumber(normalized.msrp_amount || normalized.compare_at_price);
+  normalized.costPerUnit = toNumber(normalized.cost_per_unit) || normalized.cost;
+  normalized.msrpPerUnit = toNumber(normalized.msrp_per_unit) || normalized.msrp;
   normalized.packQuantity = Math.max(1, toNumber(normalized.pack_quantity) || 1);
   normalized.isPack = clean(normalized.is_pack).toLowerCase() === 'true' || normalized.packQuantity > 1;
   normalized.status = clean(normalized.product_status).toUpperCase() || 'UNKNOWN';
@@ -203,7 +203,9 @@ function normalizeRow(row) {
   normalized.brandName = clean(normalized.brand) || 'Unbranded';
   normalized.genderName = clean(normalized.gender) || 'Unspecified';
   normalized.ageGroup = clean(normalized.age_group) || 'Unspecified';
+  normalized.audienceName = normalized.ageGroup === 'Kids' || normalized.ageGroup === 'Baby' ? normalized.ageGroup : normalized.genderName;
   normalized.usageName = clean(normalized.usage) || 'Unspecified';
+  normalized.pricingStatus = getPricingStatus(normalized);
   normalized.normalizedBarcode = normalizeBarcode(normalized.barcode);
   normalized.eanStatus = getEanStatus(normalized.barcode);
   normalized.updatedDate = normalized.updated_at ? new Date(normalized.updated_at) : null;
@@ -218,12 +220,12 @@ function renderDashboard(metadata) {
   text('scopeSummary', `${INT.format(stats.totalProducts)} permanent products and ${INT.format(stats.totalVariants)} sellable variants. Full feed: ${INT.format(allStats.totalProducts)} products and ${INT.format(allStats.totalVariants)} variants.`);
   text('totalProducts', INT.format(stats.totalProducts));
   text('totalVariants', INT.format(stats.totalVariants));
-  text('activeVariants', INT.format(stats.packVariants));
-  text('draftVariants', stats.averageCost ? EURO.format(stats.averageCost) : '-');
   text('totalStock', INT.format(stats.totalStock));
-  text('variantsWithStock', INT.format(stats.variantsWithStock));
-  text('badEans', stats.averageMsrp ? EURO.format(stats.averageMsrp) : '-');
-  text('qualityScore', `${stats.qualityScore}%`);
+  text('outOfStockVariants', INT.format(stats.variantsOutOfStock));
+  text('fullyOutProducts', INT.format(stats.fullyOutProducts));
+  text('pricingAlertsCount', INT.format(stats.pricingAlerts.length));
+  text('packVariants', INT.format(stats.packVariants));
+  text('readyForImport', `${stats.readyForImport}%`);
   text('missingBarcode', INT.format(stats.missing.barcode));
   text('badEansDetail', INT.format(stats.badEans));
   text('missingImage', INT.format(stats.missing.option2_value));
@@ -234,6 +236,8 @@ function renderDashboard(metadata) {
   text('missingSeoTitle', INT.format(stats.missing.brand));
   text('missingSeoDescription', INT.format(stats.missing.option1_value));
   text('negativeStock', INT.format(stats.negativeStockVariants));
+  text('costAboveMsrp', INT.format(stats.costAboveMsrp));
+  text('missingMsrp', INT.format(stats.missingMsrp));
   const lastGenerated = metadata?.generatedAt ? new Date(metadata.generatedAt) : stats.lastUpdated;
   text('lastUpdated', lastGenerated ? `Last CSV update: ${lastGenerated.toLocaleString()}` : 'Last CSV update: unavailable');
   renderCharts(stats);
@@ -242,7 +246,8 @@ function renderDashboard(metadata) {
   renderTimeBoundSections();
   renderProductTypes(stats.productTypes);
   renderBrandBreakdown(stats.brands);
-  renderRecentUpdates(dashboardRows);
+  renderAudienceBreakdown(stats.audiences);
+  renderPricingAlerts(stats.pricingAlerts);
   renderStockWatch(stats.stockWatch);
   populateFilters(dashboardRows);
   applyFilters();
@@ -265,6 +270,12 @@ function calculateStats(rows) {
   const missingStock = variants.filter((row) => !isPresent(row.inventory_available)).length;
   const negativeStockVariants = variants.filter((row) => row.stock < 0).length;
   const packVariants = variants.filter((row) => row.isPack).length;
+  const fullyOutProducts = countFullyOutProducts(variants);
+  const costAboveMsrp = variants.filter((row) => row.costPerUnit > 0 && row.msrpPerUnit > 0 && row.costPerUnit > row.msrpPerUnit).length;
+  const missingMsrp = variants.filter((row) => row.msrpPerUnit <= 0).length;
+  const pricingAlerts = buildPricingAlerts(variants);
+  const importReadyVariants = variants.filter(isImportReady).length;
+  const readyForImport = variants.length ? Math.round((importReadyVariants / variants.length) * 100) : 0;
   const costRows = variants.filter((row) => row.cost > 0);
   const msrpRows = variants.filter((row) => row.msrp > 0);
   const averageCost = costRows.length ? costRows.reduce((sum, row) => sum + row.cost, 0) / costRows.length : 0;
@@ -280,6 +291,11 @@ function calculateStats(rows) {
     variantsWithStock,
     variantsOutOfStock,
     packVariants,
+    fullyOutProducts,
+    costAboveMsrp,
+    missingMsrp,
+    pricingAlerts,
+    readyForImport,
     averageCost,
     averageMsrp,
     missing,
@@ -289,8 +305,9 @@ function calculateStats(rows) {
     qualityScore,
     productTypes: groupProductTypes(variants),
     brands: groupByDimension(variants, 'brandName', 'brand'),
+    audiences: groupByDimension(variants, 'audienceName', 'audience'),
     usages: groupByDimension(variants, 'usageName', 'usage'),
-    priceBuckets: buildPriceBuckets(variants),
+    pricingGroups: groupByDimension(variants, 'pricingStatus', 'status'),
     stockWatch: buildStockWatch(variants),
     lastUpdated
   };
@@ -327,12 +344,6 @@ function groupProductTypes(rows) {
   return [...groups.values()].map((entry) => ({ ...entry, averagePrice: entry.priced ? entry.priceSum / entry.priced : 0 })).sort((a, b) => b.variants - a.variants || b.stock - a.stock);
 }
 
-function buildPriceBuckets(rows) {
-  const buckets = [{ label: '0-10', min: 0, max: 10, count: 0 }, { label: '10-25', min: 10, max: 25, count: 0 }, { label: '25-50', min: 25, max: 50, count: 0 }, { label: '50-100', min: 50, max: 100, count: 0 }, { label: '100+', min: 100, max: Infinity, count: 0 }];
-  for (const row of rows.filter((item) => item.price > 0)) buckets.find((bucket) => row.price >= bucket.min && row.price < bucket.max).count += 1;
-  return buckets;
-}
-
 function groupByDimension(rows, key, labelKey) {
   const groups = new Map();
   for (const row of rows) {
@@ -348,6 +359,40 @@ function groupByDimension(rows, key, labelKey) {
     .sort((a, b) => b.variants - a.variants || b.stock - a.stock);
 }
 
+function countFullyOutProducts(rows) {
+  const products = new Map();
+  for (const row of rows) {
+    const key = productKey(row);
+    if (!key) continue;
+    const entry = products.get(key) ?? { variants: 0, out: 0 };
+    entry.variants += 1;
+    if (row.stock <= 0) entry.out += 1;
+    products.set(key, entry);
+  }
+  return [...products.values()].filter((product) => product.variants > 0 && product.variants === product.out).length;
+}
+
+function buildPricingAlerts(rows) {
+  return rows
+    .filter((row) => row.pricingStatus !== 'Ready')
+    .sort((a, b) => pricingSeverity(b) - pricingSeverity(a) || (b.costPerUnit - b.msrpPerUnit) - (a.costPerUnit - a.msrpPerUnit))
+    .slice(0, 20);
+}
+
+function pricingSeverity(row) {
+  if (row.pricingStatus === 'Cost above MSRP') return 3;
+  if (row.pricingStatus === 'Missing price') return 2;
+  return 1;
+}
+
+function isImportReady(row) {
+  return REQUIRED_FIELDS.every((field) => isPresent(row[field]))
+    && row.eanStatus === 'valid'
+    && isPresent(row.inventory_available)
+    && row.msrpPerUnit > 0
+    && row.pricingStatus === 'Ready';
+}
+
 function buildStockWatch(rows) {
   const products = new Map();
   for (const row of rows) {
@@ -361,8 +406,8 @@ function buildStockWatch(rows) {
     products.set(key, product);
   }
   return [...products.values()]
-    .filter((product) => product.stock <= 0 || product.negativeVariants > 0 || product.outVariants === product.variants)
-    .sort((a, b) => a.stock - b.stock || b.negativeVariants - a.negativeVariants || b.outVariants - a.outVariants)
+    .filter((product) => product.outVariants > 0 || product.stock <= 0 || product.negativeVariants > 0)
+    .sort((a, b) => b.outVariants - a.outVariants || a.stock - b.stock || b.negativeVariants - a.negativeVariants)
     .slice(0, 12);
 }
 
@@ -373,13 +418,14 @@ function renderCharts(stats) {
   state.charts.status = new Chart(el('statusChart'), { type: 'doughnut', data: { labels: topBrands.map((item) => item.brand), datasets: [{ data: topBrands.map((item) => item.variants), backgroundColor: colors, borderWidth: 0 }] }, options: chartOptions() });
   const topStockTypes = stats.productTypes.slice(0, 8);
   state.charts.stock = new Chart(el('stockTypeChart'), { type: 'bar', data: { labels: topStockTypes.map((item) => item.type), datasets: [{ label: 'Available stock', data: topStockTypes.map((item) => item.stock), backgroundColor: colors }] }, options: chartOptions({ indexAxis: 'y' }) });
-  state.charts.prices = new Chart(el('priceChart'), { type: 'bar', data: { labels: stats.priceBuckets.map((bucket) => bucket.label), datasets: [{ label: 'Variants', data: stats.priceBuckets.map((bucket) => bucket.count), backgroundColor: '#6f91a8' }] }, options: chartOptions() });
+  const pricingGroups = stats.pricingGroups.slice(0, 8);
+  state.charts.prices = new Chart(el('priceChart'), { type: 'doughnut', data: { labels: pricingGroups.map((item) => item.status), datasets: [{ data: pricingGroups.map((item) => item.variants), backgroundColor: ['#376b5d', '#d78f7a', '#b9544a', '#d8b066'], borderWidth: 0 }] }, options: chartOptions() });
   const topUsages = stats.usages.slice(0, 8);
   state.charts.missing = new Chart(el('missingChart'), { type: 'bar', data: { labels: topUsages.map((item) => item.usage), datasets: [{ label: 'Variants', data: topUsages.map((item) => item.variants), backgroundColor: colors }] }, options: chartOptions({ indexAxis: 'y' }) });
 }
 
 function buildCurrentSnapshot(stats, metadata) {
-  return { generatedAt: metadata?.generatedAt || new Date().toISOString(), productCount: stats.totalProducts, variantCount: stats.totalVariants, activeVariants: stats.activeVariants, draftVariants: stats.draftVariants, totalStock: stats.totalStock, variantsWithStock: stats.variantsWithStock, variantsOutOfStock: stats.variantsOutOfStock, qualityScore: stats.qualityScore, badEans: stats.badEans, rowCount: metadata?.rowCount ?? stats.totalVariants };
+  return { generatedAt: metadata?.generatedAt || new Date().toISOString(), productCount: stats.totalProducts, variantCount: stats.totalVariants, activeVariants: stats.activeVariants, draftVariants: stats.draftVariants, totalStock: stats.totalStock, variantsWithStock: stats.variantsWithStock, variantsOutOfStock: stats.variantsOutOfStock, readyForImport: stats.readyForImport, qualityScore: stats.readyForImport, badEans: stats.badEans, rowCount: metadata?.rowCount ?? stats.totalVariants };
 }
 
 function buildCurrentProductSnapshot(rows, metadata) {
@@ -402,7 +448,8 @@ function normalizeHistory(snapshots) {
     if (!snapshot?.generatedAt) continue;
     const date = new Date(snapshot.generatedAt);
     if (Number.isNaN(date.valueOf())) continue;
-    byDate.set(date.toISOString().slice(0, 10), { generatedAt: date.toISOString(), productCount: toNumber(snapshot.productCount), variantCount: toNumber(snapshot.variantCount ?? snapshot.rowCount), totalStock: toNumber(snapshot.totalStock), qualityScore: toNumber(snapshot.qualityScore), badEans: toNumber(snapshot.badEans), rowCount: toNumber(snapshot.rowCount) });
+    const readyForImport = toNumber(snapshot.readyForImport ?? snapshot.qualityScore);
+    byDate.set(date.toISOString().slice(0, 10), { generatedAt: date.toISOString(), productCount: toNumber(snapshot.productCount), variantCount: toNumber(snapshot.variantCount ?? snapshot.rowCount), totalStock: toNumber(snapshot.totalStock), readyForImport, qualityScore: readyForImport, badEans: toNumber(snapshot.badEans), rowCount: toNumber(snapshot.rowCount) });
   }
   return [...byDate.values()].sort((a, b) => new Date(a.generatedAt) - new Date(b.generatedAt)).slice(-60);
 }
@@ -461,7 +508,7 @@ function renderTimeBoundSections() {
   text('deltaProducts', formatDelta(latest?.productCount, first?.productCount));
   text('deltaVariants', formatDelta(latest?.variantCount, first?.variantCount));
   text('deltaStock', formatDelta(latest?.totalStock, first?.totalStock));
-  text('deltaQuality', formatDelta(latest?.qualityScore, first?.qualityScore, '%'));
+  text('deltaQuality', formatDelta(latest?.readyForImport, first?.readyForImport, '%'));
   renderHistoryChart(historySnapshots);
   renderHistoryTable(historySnapshots);
   renderMovementForRange(bounds);
@@ -605,11 +652,11 @@ function labelForPreset(preset) {
 function renderHistoryChart(snapshots) {
   destroyCharts(['history']);
   if (snapshots.length === 0) { el('historyBody').innerHTML = '<tr><td colspan="5">No history available yet.</td></tr>'; return; }
-  state.charts.history = new Chart(el('historyChart'), { type: 'line', data: { labels: snapshots.map((snapshot) => shortDate(snapshot.generatedAt)), datasets: [{ label: 'Variants', data: snapshots.map((snapshot) => snapshot.variantCount), borderColor: '#6f91a8', backgroundColor: '#6f91a8', tension: 0.3, yAxisID: 'y' }, { label: 'Stock', data: snapshots.map((snapshot) => snapshot.totalStock), borderColor: '#376b5d', backgroundColor: '#376b5d', tension: 0.3, yAxisID: 'y' }, { label: 'Quality %', data: snapshots.map((snapshot) => snapshot.qualityScore), borderColor: '#d78f7a', backgroundColor: '#d78f7a', tension: 0.3, yAxisID: 'quality' }] }, options: { responsive: true, maintainAspectRatio: false, interaction: { intersect: false, mode: 'index' }, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, quality: { beginAtZero: true, max: 100, position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: (value) => `${value}%` } } } } });
+  state.charts.history = new Chart(el('historyChart'), { type: 'line', data: { labels: snapshots.map((snapshot) => shortDate(snapshot.generatedAt)), datasets: [{ label: 'Variants', data: snapshots.map((snapshot) => snapshot.variantCount), borderColor: '#6f91a8', backgroundColor: '#6f91a8', tension: 0.3, yAxisID: 'y' }, { label: 'Stock', data: snapshots.map((snapshot) => snapshot.totalStock), borderColor: '#376b5d', backgroundColor: '#376b5d', tension: 0.3, yAxisID: 'y' }, { label: 'Ready %', data: snapshots.map((snapshot) => snapshot.readyForImport), borderColor: '#d78f7a', backgroundColor: '#d78f7a', tension: 0.3, yAxisID: 'quality' }] }, options: { responsive: true, maintainAspectRatio: false, interaction: { intersect: false, mode: 'index' }, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, quality: { beginAtZero: true, max: 100, position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: (value) => `${value}%` } } } } });
 }
 
 function renderHistoryTable(snapshots) {
-  const rows = snapshots.slice(-10).reverse().map((snapshot) => `<tr><td>${shortDate(snapshot.generatedAt)}</td><td>${INT.format(snapshot.productCount)}</td><td>${INT.format(snapshot.variantCount)}</td><td>${INT.format(snapshot.totalStock)}</td><td>${INT.format(snapshot.qualityScore)}%</td></tr>`).join('');
+  const rows = snapshots.slice(-10).reverse().map((snapshot) => `<tr><td>${shortDate(snapshot.generatedAt)}</td><td>${INT.format(snapshot.productCount)}</td><td>${INT.format(snapshot.variantCount)}</td><td>${INT.format(snapshot.totalStock)}</td><td>${INT.format(snapshot.readyForImport)}%</td></tr>`).join('');
   el('historyBody').innerHTML = rows || '<tr><td colspan="5">No history available yet.</td></tr>';
 }
 
@@ -626,9 +673,13 @@ function renderBrandBreakdown(brands) {
   el('brandBody').innerHTML = rows || '<tr><td colspan="4">No brands found.</td></tr>';
 }
 
-function renderRecentUpdates(rows) {
-  const recent = uniqueRows(rows, variantKey).filter((row) => row.updatedDate).sort((a, b) => b.updatedDate - a.updatedDate).slice(0, 10);
-  el('recentUpdatesBody').innerHTML = recent.map((row) => `<tr><td>${row.updatedDate.toLocaleString()}</td><td>${escapeHtml(row.variant_sku || '-')}</td><td>${escapeHtml(row.brandName)}</td><td>${renderProductLink(row.product_title || '-', row.product_url)}</td><td>${INT.format(row.stock)}</td></tr>`).join('') || '<tr><td colspan="5">No update dates found.</td></tr>';
+function renderAudienceBreakdown(audiences) {
+  const rows = audiences.slice(0, 12).map((item) => `<tr><td>${escapeHtml(item.audience)}</td><td>${INT.format(item.variants)}</td><td>${INT.format(item.stock)}</td><td>${item.averagePrice ? EURO.format(item.averagePrice) : '-'}</td></tr>`).join('');
+  el('audienceBody').innerHTML = rows || '<tr><td colspan="4">No audience data found.</td></tr>';
+}
+
+function renderPricingAlerts(rows) {
+  el('pricingAlertsBody').innerHTML = rows.map((row) => `<tr><td>${escapeHtml(row.variant_sku || '-')}</td><td class="product-cell"><strong>${escapeHtml(row.product_title || '-')}</strong><span>${escapeHtml([row.option1_value, row.option2_value].filter(Boolean).join(' / '))}</span></td><td>${row.costPerUnit ? EURO.format(row.costPerUnit) : '-'}</td><td>${row.msrpPerUnit ? EURO.format(row.msrpPerUnit) : '-'}</td><td><span class="badge attention">${escapeHtml(row.pricingStatus)}</span></td></tr>`).join('') || '<tr><td colspan="5">No pricing alerts.</td></tr>';
 }
 
 function renderStockWatch(items) {
@@ -650,20 +701,9 @@ function setOptions(select, options, firstLabel) {
 }
 
 function bindFilters() {
-  ['searchInput', 'brandFilter', 'stockFilter', 'typeFilter', 'eanFilter', 'genderFilter', 'ageFilter', 'usageFilter', 'packFilter'].forEach((id) => el(id).addEventListener('input', applyFilters));
+  ['searchInput', 'brandFilter', 'stockFilter', 'typeFilter', 'eanFilter', 'genderFilter', 'ageFilter', 'usageFilter', 'pricingFilter', 'packFilter'].forEach((id) => el(id).addEventListener('input', applyFilters));
   el('pageSizeSelect').addEventListener('input', () => { const value = el('pageSizeSelect').value; state.pageSize = value === 'all' ? Infinity : toNumber(value); renderCatalogueTable(); });
   el('groupProductsToggle').addEventListener('change', (event) => { state.groupProducts = event.target.checked; state.expandedProducts.clear(); applyFilters(); });
-}
-
-function bindStatusScope() {
-  document.querySelectorAll('[data-status-scope]').forEach((button) => {
-    button.addEventListener('click', () => {
-      state.statusScope = button.dataset.statusScope;
-      state.expandedProducts.clear();
-      document.querySelectorAll('[data-status-scope]').forEach((item) => item.classList.toggle('active', item === button));
-      renderDashboard({ generatedAt: getLatestSnapshotDate()?.toISOString() || new Date().toISOString() });
-    });
-  });
 }
 
 function bindSorting() {
@@ -697,6 +737,7 @@ function applyFilters() {
   const gender = el('genderFilter').value;
   const age = el('ageFilter').value;
   const usage = el('usageFilter').value;
+  const pricing = el('pricingFilter').value;
   const pack = el('packFilter').value;
   const variants = uniqueRows(getScopedRows(state.rows), variantKey);
   state.filteredRows = variants.filter((row) => {
@@ -708,8 +749,9 @@ function applyFilters() {
     const matchesGender = !gender || row.genderName === gender;
     const matchesAge = !age || row.ageGroup === age;
     const matchesUsage = !usage || row.usageName === usage;
+    const matchesPricing = !pricing || matchesPricingFilter(row, pricing);
     const matchesPack = !pack || (pack === 'pack' ? row.isPack : !row.isPack);
-    return matchesSearch && matchesBrand && matchesStock && matchesType && matchesEan && matchesGender && matchesAge && matchesUsage && matchesPack;
+    return matchesSearch && matchesBrand && matchesStock && matchesType && matchesEan && matchesGender && matchesAge && matchesUsage && matchesPricing && matchesPack;
   });
   state.groupedRows = buildProductGroups(state.filteredRows);
   renderCatalogueTable();
@@ -790,6 +832,14 @@ function renderVariantTable() {
   el('variantsBody').innerHTML = visible.map(renderVariantRow).join('') || '<tr><td colspan="12">No variants match the selected filters.</td></tr>';
 }
 
+function matchesPricingFilter(row, pricing) {
+  if (pricing === 'ready') return row.pricingStatus === 'Ready';
+  if (pricing === 'alert') return row.pricingStatus !== 'Ready';
+  if (pricing === 'cost-above-msrp') return row.pricingStatus === 'Cost above MSRP';
+  if (pricing === 'missing-price') return row.pricingStatus === 'Missing price';
+  return true;
+}
+
 function renderGroupedProductTable() {
   const limit = Number.isFinite(state.pageSize) ? state.pageSize : state.groupedRows.length;
   const visible = state.groupedRows.slice(0, limit);
@@ -812,6 +862,12 @@ function renderProductGroup(group) {
 function renderPack(row) {
   if (!row.isPack) return '-';
   return `<span class="badge attention">${INT.format(row.packQuantity)}x</span>`;
+}
+
+function getPricingStatus(row) {
+  if (row.costPerUnit <= 0 || row.msrpPerUnit <= 0) return 'Missing price';
+  if (row.costPerUnit > row.msrpPerUnit) return 'Cost above MSRP';
+  return 'Ready';
 }
 
 function renderProductLink(label, url) {
@@ -839,14 +895,15 @@ function isValidEan(value) {
 }
 
 function renderEmptyState() {
-  ['totalProducts', 'totalVariants', 'activeVariants', 'draftVariants', 'totalStock', 'variantsWithStock', 'badEans', 'qualityScore', 'missingBarcode', 'badEansDetail', 'missingSeoTitle', 'missingSeoDescription', 'missingImage', 'missingPrice', 'missingStock', 'negativeStock', 'outOfStockDetail', 'missingProductType', 'deltaProducts', 'deltaVariants', 'deltaStock', 'deltaQuality'].forEach((id) => text(id, '-'));
+  ['totalProducts', 'totalVariants', 'totalStock', 'outOfStockVariants', 'fullyOutProducts', 'pricingAlertsCount', 'packVariants', 'readyForImport', 'missingBarcode', 'badEansDetail', 'missingSeoTitle', 'missingSeoDescription', 'missingImage', 'missingPrice', 'missingStock', 'negativeStock', 'outOfStockDetail', 'missingProductType', 'costAboveMsrp', 'missingMsrp', 'deltaProducts', 'deltaVariants', 'deltaStock', 'deltaQuality'].forEach((id) => text(id, '-'));
   text('lastUpdated', 'Last CSV update: unavailable');
   text('scopeSummary', 'No feed data available.');
   text('timeRangeSummary', 'No snapshots available.');
   el('stockWatchBody').innerHTML = '<tr><td colspan="4">No data available.</td></tr>';
   el('brandBody').innerHTML = '<tr><td colspan="4">No data available.</td></tr>';
+  el('pricingAlertsBody').innerHTML = '<tr><td colspan="5">No data available.</td></tr>';
+  el('audienceBody').innerHTML = '<tr><td colspan="4">No data available.</td></tr>';
   el('productTypesBody').innerHTML = '<tr><td colspan="4">No data available.</td></tr>';
-  el('recentUpdatesBody').innerHTML = '<tr><td colspan="5">No data available.</td></tr>';
   el('newProductsBody').innerHTML = '<tr><td colspan="4">No data available.</td></tr>';
   el('stockMoversBody').innerHTML = '<tr><td colspan="4">No data available.</td></tr>';
   el('variantsBody').innerHTML = '<tr><td colspan="12">No data available.</td></tr>';
