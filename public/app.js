@@ -208,6 +208,7 @@ function normalizeRow(row) {
   normalized.audienceName = normalized.ageGroup === 'Kids' || normalized.ageGroup === 'Baby' ? normalized.ageGroup : normalized.genderName;
   normalized.usageName = clean(normalized.usage) || 'Unspecified';
   normalized.pricingStatus = getPricingStatus(normalized);
+  normalized.imageUrl = clean(normalized.image_url);
   normalized.normalizedBarcode = normalizeBarcode(normalized.barcode);
   normalized.eanStatus = getEanStatus(normalized.barcode);
   normalized.updatedDate = normalized.updated_at ? new Date(normalized.updated_at) : null;
@@ -435,9 +436,10 @@ function buildCurrentProductSnapshot(rows, metadata) {
   for (const row of uniqueRows(rows, variantKey)) {
     const id = productKey(row);
     if (!id) continue;
-    const product = products.get(id) ?? { id, title: row.product_title, handle: row.product_handle, productType: row.productType, productUrl: row.product_url, stock: 0, variantCount: 0 };
+    const product = products.get(id) ?? { id, title: row.product_title, handle: row.product_handle, productType: row.productType, imageUrl: row.imageUrl, productUrl: row.product_url, stock: 0, variantCount: 0 };
     product.stock += row.stock;
     product.variantCount += 1;
+    if (!product.imageUrl && row.imageUrl) product.imageUrl = row.imageUrl;
     if (!product.productUrl && row.product_url) product.productUrl = row.product_url;
     products.set(id, product);
   }
@@ -469,6 +471,7 @@ function normalizeProductHistory(snapshots) {
         title: clean(product.title),
         handle: clean(product.handle),
         productType: clean(product.productType) || 'Unclassified',
+        imageUrl: clean(product.imageUrl),
         productUrl: clean(product.productUrl),
         stock: toNumber(product.stock),
         variantCount: toNumber(product.variantCount)
@@ -807,9 +810,10 @@ function buildProductGroups(rows) {
   const groups = new Map();
   for (const row of rows) {
     const key = productKey(row) || variantKey(row);
-    const entry = groups.get(key) ?? { key, first: row, variants: [], stock: 0, priceMin: Infinity, priceMax: 0, msrpMin: Infinity, msrpMax: 0, badEans: 0, packs: 0 };
+    const entry = groups.get(key) ?? { key, first: row, variants: [], stock: 0, priceMin: Infinity, priceMax: 0, msrpMin: Infinity, msrpMax: 0, badEans: 0, packs: 0, imageUrl: row.imageUrl };
     entry.variants.push(row);
     entry.stock += row.stock;
+    if (!entry.imageUrl && row.imageUrl) entry.imageUrl = row.imageUrl;
     if (row.cost > 0) { entry.priceMin = Math.min(entry.priceMin, row.cost); entry.priceMax = Math.max(entry.priceMax, row.cost); }
     if (row.msrp > 0) { entry.msrpMin = Math.min(entry.msrpMin, row.msrp); entry.msrpMax = Math.max(entry.msrpMax, row.msrp); }
     if (row.isPack) entry.packs += 1;
@@ -901,7 +905,7 @@ function renderProductGroup(group) {
   const detailRow = expanded ? renderProductDrawer(group) : '';
   const colors = [...new Set(group.variants.map((row) => row.option1_value).filter(Boolean))];
   const alertCount = group.variants.filter((row) => row.eanStatus !== 'valid' || row.pricingStatus !== 'Ready' || row.stock <= 0).length;
-  return `<tr class="product-group-row ${expanded ? 'expanded' : ''}"><td><button class="expand-button" type="button" data-expand-product="${escapeAttribute(group.key)}">${expanded ? 'Hide' : 'Show'} ${INT.format(group.variants.length)}</button>${alertCount ? `<span class="compact-alert">${INT.format(alertCount)} alerts</span>` : ''}</td><td class="product-cell"><strong>${renderProductLink(group.first.product_title || '-', group.first.product_url)}</strong><span>${escapeHtml([group.first.product_id, group.first.genderName, group.first.ageGroup].filter((item) => item && item !== 'Unspecified').join(' / '))}</span></td><td>${escapeHtml(group.first.brandName)}</td><td class="stacked-cell"><strong>${escapeHtml(group.first.productType)}</strong><span>${escapeHtml(group.first.usageName)}</span></td><td>${renderColorSwatches(colors)}</td><td class="price-stack"><span>Cost ${priceText}</span><span>MSRP ${msrpText}</span>${group.packs ? `<em>${INT.format(group.packs)} pack row${group.packs > 1 ? 's' : ''}</em>` : ''}</td><td><span class="badge ${group.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(group.stock)}</span></td></tr>${detailRow}`;
+  return `<tr class="product-group-row ${expanded ? 'expanded' : ''}"><td><button class="expand-button" type="button" data-expand-product="${escapeAttribute(group.key)}">${expanded ? 'Hide' : 'Show'} ${INT.format(group.variants.length)}</button>${alertCount ? `<span class="compact-alert">${INT.format(alertCount)} alerts</span>` : ''}</td><td class="product-identity">${renderProductThumb(group)}<div><strong>${renderProductLink(group.first.product_title || '-', group.first.product_url)}</strong><span>${escapeHtml([group.first.product_id, group.first.genderName, group.first.ageGroup].filter((item) => item && item !== 'Unspecified').join(' / '))}</span></div></td><td>${escapeHtml(group.first.brandName)}</td><td class="stacked-cell"><strong>${escapeHtml(group.first.productType)}</strong><span>${escapeHtml(group.first.usageName)}</span></td><td>${renderColorSwatches(colors)}</td><td class="price-stack"><span>Cost ${priceText}</span><span>MSRP ${msrpText}</span>${group.packs ? `<em>${INT.format(group.packs)} pack row${group.packs > 1 ? 's' : ''}</em>` : ''}</td><td><span class="badge ${group.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(group.stock)}</span></td></tr>${detailRow}`;
 }
 
 function renderProductDrawer(group) {
@@ -1000,7 +1004,7 @@ function clearCatalogFilters() {
 function exportFilteredCsv() {
   const rows = sortRows(state.filteredRows);
   if (!rows.length) return;
-  const headers = ['variant_sku', 'product_id', 'barcode', 'brand', 'product_title', 'color', 'size', 'product_type', 'usage', 'gender', 'age_group', 'cost_amount', 'compare_at_price', 'pack_quantity', 'inventory_available', 'pricing_status'];
+  const headers = ['variant_sku', 'product_id', 'barcode', 'brand', 'product_title', 'color', 'size', 'product_type', 'usage', 'gender', 'age_group', 'image_url', 'cost_amount', 'compare_at_price', 'pack_quantity', 'inventory_available', 'pricing_status'];
   const lines = [
     headers.join(','),
     ...rows.map((row) => [
@@ -1015,6 +1019,7 @@ function exportFilteredCsv() {
       row.usageName,
       row.genderName,
       row.ageGroup,
+      row.imageUrl,
       row.cost,
       row.msrp,
       row.packQuantity,
@@ -1037,6 +1042,12 @@ function csvCell(value) {
   const textValue = String(value ?? '');
   if (/[",\n]/.test(textValue)) return `"${textValue.replace(/"/g, '""')}"`;
   return textValue;
+}
+
+function renderProductThumb(group) {
+  const url = clean(group.imageUrl || group.first?.imageUrl);
+  if (!url) return '<span class="product-thumb empty">No image</span>';
+  return `<a class="product-thumb" href="${escapeAttribute(url)}" target="_blank" rel="noopener"><img src="${escapeAttribute(url)}" alt=""></a>`;
 }
 
 function updateSortButtonsStable() {

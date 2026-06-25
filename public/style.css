@@ -121,6 +121,9 @@ tbody tr:hover { background: color-mix(in srgb, var(--primary) 7%, transparent);
 .product-thumb { align-items: center; background: var(--surface-soft); border: 1px solid var(--border); border-radius: 8px; color: var(--muted); display: inline-flex; font-size: .68rem; font-weight: 800; height: 54px; justify-content: center; line-height: 1.1; overflow: hidden; text-align: center; text-decoration: none; width: 54px; }
 .product-thumb img { display: block; height: 100%; object-fit: cover; width: 100%; }
 .product-thumb.empty { padding: 6px; }
+.product-identity { align-items: center; display: grid; gap: 10px; grid-template-columns: 54px minmax(0, 1fr); }
+.product-identity strong { display: block; max-width: 220px; }
+.product-identity span { color: var(--muted); display: block; font-size: .8rem; margin-top: 3px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .product-cell strong { display: block; max-width: 360px; }
 .product-cell span { color: var(--muted); display: block; font-size: .8rem; margin-top: 3px; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .product-link { color: var(--link); font-weight: 900; text-decoration: none; }

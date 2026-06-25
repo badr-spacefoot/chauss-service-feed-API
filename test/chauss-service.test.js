@@ -34,7 +34,7 @@ test('maps Chauss Service article assortiments to dashboard CSV rows', () => {
     matieres: { tige: 'Cuir gras' },
     talon: { type: '' },
     assortiments: [
-      { codebarre: '3612345678912', couleur: 'MARRON', taille: '36', stock: 11, pu_ht: 54.9, qteColis: 0 }
+      { codebarre: '3612345678912', couleur: 'MARRON', taille: '36', stock: 11, pu_ht: 54.9, qteColis: 0, photo: 'https://www.chauss-service.fr/assets/article/multimedia/test image.jpg' }
     ]
   });
 
@@ -55,6 +55,8 @@ test('maps Chauss Service article assortiments to dashboard CSV rows', () => {
   assert.equal(rows[0].usage, 'Outdoor');
   assert.equal(rows[0].upper_material, 'Cuir gras');
   assert.equal(rows[0].inventory_available, '11');
+  assert.equal(rows[0].image_url, 'https://www.chauss-service.fr/assets/article/multimedia/test%20image.jpg');
+  assert.equal(rows[0].all_images, 'https://www.chauss-service.fr/assets/article/multimedia/test%20image.jpg');
 });
 
 test('detects H-size packs and keeps MSRP as a per-unit value', () => {

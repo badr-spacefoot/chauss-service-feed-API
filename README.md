@@ -57,7 +57,7 @@ The feed uses:
 - `GET /articles/{reference}` for article details and assortiments.
 - `GET /stocks` as an optional stock override by barcode.
 
-Chauss Service assortiments become dashboard variants. The variant barcode comes from `codebarre`, color from `couleur`, size from `taille`, COST from `pu_ht`, MSRP from `pvc_ttc`, and available stock from `/stocks` when present, otherwise from the article detail.
+Chauss Service assortiments become dashboard variants. The variant barcode comes from `codebarre`, color from `couleur`, size from `taille`, COST from `pu_ht`, image from `photo`, MSRP from `pvc_ttc`, and available stock from `/stocks` when present, otherwise from the article detail.
 
 The feed keeps the historical `price_amount` and `compare_at_price` columns for compatibility, but also writes clearer fields:
 
@@ -66,4 +66,5 @@ The feed keeps the historical `price_amount` and `compare_at_price` columns for 
 - `variant_sku` is the Chauss Service `product_id`
 - `variant_id` remains the barcode/EAN so variants stay unique
 - `pack_quantity`, `cost_per_unit`, `msrp_per_unit`, and `is_pack` identify pack sizes such as `H8L`, `H10`, and `H12`
+- `image_url` and `all_images` use the assortment-level `photo` URL when available
 - `brand`, `gender`, `age_group`, `usage`, `construction`, and material columns enrich filtering and analysis

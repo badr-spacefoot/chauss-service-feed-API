@@ -142,6 +142,7 @@ function toCsvRow({ article, assortment, stockByBarcode, env }) {
   const packQuantity = getPackQuantity(assortment);
   const isPack = packQuantity > 1;
   const audience = normalizeAudience(article.rayon);
+  const imageUrl = normalizeImageUrl(assortment?.photo);
 
   return {
     brand: clean(article.marque) || env.FEED_BRAND || 'Chauss Service',
@@ -186,12 +187,12 @@ function toCsvRow({ article, assortment, stockByBarcode, env }) {
     inventory_committed: '',
     inventory_location_id: '',
     inventory_location_name: '',
-    image_url: '',
+    image_url: imageUrl,
     product_url: '',
     tags: [article.rayon, article.usage, article.construction].map(clean).filter(Boolean).join(', '),
     seo_title: clean(article.nom),
     seo_description: buildSeoDescription(article),
-    all_images: '',
+    all_images: imageUrl,
     metafields_json: JSON.stringify(buildMetafields(article, assortment)),
     updated_at: new Date().toISOString()
   };
@@ -262,8 +263,19 @@ function buildMetafields(article, assortment) {
     matieres: article.matieres ?? {},
     talon: article.talon ?? {},
     pvc_ttc: article.pvc_ttc ?? '',
-    qte_colis: assortment?.qteColis ?? ''
+    qte_colis: assortment?.qteColis ?? '',
+    photo: normalizeImageUrl(assortment?.photo)
   };
+}
+
+function normalizeImageUrl(value) {
+  const url = clean(value);
+  if (!url) return '';
+  try {
+    return new URL(url).href;
+  } catch (_error) {
+    return url;
+  }
 }
 
 function normalizeAudience(rayon) {
