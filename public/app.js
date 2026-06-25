@@ -17,7 +17,7 @@ const state = {
   charts: {},
   sort: { key: 'stock', direction: 'desc' },
   pageSize: 100,
-  groupProducts: false,
+  groupProducts: true,
   timeRange: { preset: 'last-30-days', customFrom: '', customTo: '' }
 };
 let feedStatusTimer = null;
@@ -734,13 +734,13 @@ function bindHeaderScroll() {
 }
 
 function bindSorting() {
-  document.querySelectorAll('[data-sort]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const key = button.dataset.sort;
-      const sameKey = state.sort.key === key;
-      state.sort = { key, direction: sameKey && state.sort.direction === 'asc' ? 'desc' : 'asc' };
-      applyFilters();
-    });
+  document.querySelector('.catalog-table thead').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-sort]');
+    if (!button) return;
+    const key = button.dataset.sort;
+    const sameKey = state.sort.key === key;
+    state.sort = { key, direction: sameKey && state.sort.direction === 'asc' ? 'desc' : 'asc' };
+    applyFilters();
   });
 }
 
@@ -787,8 +787,20 @@ function applyFilters() {
 }
 
 function renderCatalogueTable() {
+  renderCatalogHeader();
   if (state.groupProducts) renderGroupedProductTable();
   else renderVariantTable();
+}
+
+function renderCatalogHeader() {
+  const table = document.querySelector('.catalog-table table');
+  const head = document.querySelector('.catalog-table thead');
+  table.classList.toggle('grouped-catalog', state.groupProducts);
+  if (state.groupProducts) {
+    head.innerHTML = '<tr><th><button class="sort-button" type="button" data-sort="variant_sku">Variants</button></th><th><button class="sort-button" type="button" data-sort="product_title">Product</button></th><th><button class="sort-button" type="button" data-sort="brand">Brand</button></th><th><button class="sort-button" type="button" data-sort="productType">Type / Usage</button></th><th><button class="sort-button" type="button" data-sort="option1_value">Colors</button></th><th><button class="sort-button" type="button" data-sort="cost">Pricing</button></th><th><button class="sort-button" type="button" data-sort="stock">Stock</button></th></tr>';
+    return;
+  }
+  head.innerHTML = '<tr><th><button class="sort-button" type="button" data-sort="variant_sku">SKU</button></th><th><button class="sort-button" type="button" data-sort="barcode">Barcode</button></th><th><button class="sort-button" type="button" data-sort="brand">Brand</button></th><th><button class="sort-button" type="button" data-sort="product_title">Product</button></th><th><button class="sort-button" type="button" data-sort="option1_value">Color</button></th><th><button class="sort-button" type="button" data-sort="option2_value">Size</button></th><th><button class="sort-button" type="button" data-sort="productType">Type</button></th><th><button class="sort-button" type="button" data-sort="usage">Usage</button></th><th><button class="sort-button" type="button" data-sort="cost">Cost</button></th><th><button class="sort-button" type="button" data-sort="msrp">MSRP</button></th><th><button class="sort-button" type="button" data-sort="packQuantity">Pack</button></th><th><button class="sort-button" type="button" data-sort="stock">Stock</button></th></tr>';
 }
 
 function buildProductGroups(rows) {
@@ -820,6 +832,7 @@ function groupSortValue(group, key) {
   if (key === 'packQuantity') return group.packs;
   if (key === 'productType') return group.first.productType;
   if (key === 'brand') return group.first.brandName;
+  if (key === 'option1_value') return [...new Set(group.variants.map((row) => clean(row.option1_value)).filter(Boolean))].join(' ');
   if (key === 'barcode') return group.badEans;
   if (key === 'variant_sku') return group.variants.length;
   return clean(group.first.product_title).toLowerCase();
@@ -872,9 +885,9 @@ function matchesPricingFilter(row, pricing) {
 function renderGroupedProductTable() {
   const limit = Number.isFinite(state.pageSize) ? state.pageSize : state.groupedRows.length;
   const visible = state.groupedRows.slice(0, limit);
-  text('filterSummary', `Showing ${INT.format(visible.length)} of ${INT.format(state.groupedRows.length)} matching products. Click a product row to see sizes and EANs.`);
+  text('filterSummary', `Showing ${INT.format(visible.length)} of ${INT.format(state.groupedRows.length)} matching products. Open a product to inspect sizes, EANs, pack rows, and stock.`);
   text('resultCount', `${INT.format(state.groupedRows.length)} products / ${INT.format(state.filteredRows.length)} variants`);
-  el('variantsBody').innerHTML = visible.map(renderProductGroup).join('') || '<tr><td colspan="12">No products match the selected filters.</td></tr>';
+  el('variantsBody').innerHTML = visible.map(renderProductGroup).join('') || '<tr><td colspan="7">No products match the selected filters.</td></tr>';
 }
 
 function renderVariantRow(row) {
@@ -886,7 +899,9 @@ function renderProductGroup(group) {
   const priceText = group.priceMin === Infinity ? '-' : group.priceMin === group.priceMax ? EURO.format(group.priceMin) : `${EURO.format(group.priceMin)} - ${EURO.format(group.priceMax)}`;
   const msrpText = group.msrpMin === Infinity ? '-' : group.msrpMin === group.msrpMax ? EURO.format(group.msrpMin) : `${EURO.format(group.msrpMin)} - ${EURO.format(group.msrpMax)}`;
   const detailRow = expanded ? renderProductDrawer(group) : '';
-  return `<tr class="product-group-row ${expanded ? 'expanded' : ''}"><td><button class="expand-button" type="button" data-expand-product="${escapeAttribute(group.key)}">${expanded ? 'Hide' : 'Show'} ${INT.format(group.variants.length)}</button></td><td>${group.badEans ? `<span class="ean-pill ean-bad">${INT.format(group.badEans)} bad EAN</span>` : '<span class="ean-pill ean-valid">EAN OK</span>'}</td><td>${escapeHtml(group.first.brandName)}</td><td class="product-cell"><strong>${renderProductLink(group.first.product_title || '-', group.first.product_url)}</strong><span>${escapeHtml(group.first.product_handle || '')}</span></td><td>-</td><td>-</td><td>${escapeHtml(group.first.productType)}</td><td>${escapeHtml(group.first.usageName)}</td><td>${priceText}</td><td>${msrpText}</td><td>${group.packs ? `${INT.format(group.packs)} packs` : '-'}</td><td><span class="badge ${group.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(group.stock)}</span></td></tr>${detailRow}`;
+  const colors = [...new Set(group.variants.map((row) => row.option1_value).filter(Boolean))];
+  const alertCount = group.variants.filter((row) => row.eanStatus !== 'valid' || row.pricingStatus !== 'Ready' || row.stock <= 0).length;
+  return `<tr class="product-group-row ${expanded ? 'expanded' : ''}"><td><button class="expand-button" type="button" data-expand-product="${escapeAttribute(group.key)}">${expanded ? 'Hide' : 'Show'} ${INT.format(group.variants.length)}</button>${alertCount ? `<span class="compact-alert">${INT.format(alertCount)} alerts</span>` : ''}</td><td class="product-cell"><strong>${renderProductLink(group.first.product_title || '-', group.first.product_url)}</strong><span>${escapeHtml([group.first.product_id, group.first.genderName, group.first.ageGroup].filter((item) => item && item !== 'Unspecified').join(' / '))}</span></td><td>${escapeHtml(group.first.brandName)}</td><td class="stacked-cell"><strong>${escapeHtml(group.first.productType)}</strong><span>${escapeHtml(group.first.usageName)}</span></td><td>${renderColorSwatches(colors)}</td><td class="price-stack"><span>Cost ${priceText}</span><span>MSRP ${msrpText}</span>${group.packs ? `<em>${INT.format(group.packs)} pack row${group.packs > 1 ? 's' : ''}</em>` : ''}</td><td><span class="badge ${group.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(group.stock)}</span></td></tr>${detailRow}`;
 }
 
 function renderProductDrawer(group) {
@@ -894,31 +909,22 @@ function renderProductDrawer(group) {
   const colors = [...new Set(variants.map((row) => row.option1_value).filter(Boolean))];
   const issueCount = variants.filter((row) => row.pricingStatus !== 'Ready' || row.eanStatus !== 'valid' || row.stock <= 0).length;
   const summary = [
-    ['Variants', group.variants.length],
-    ['Colors', colors.length],
-    ['Packs', group.packs],
-    ['Alerts', issueCount]
+    ['SKU', group.first.variant_sku || group.first.product_id || '-'],
+    ['Colors', colors.join(', ') || '-'],
+    ['Cost', group.priceMin === Infinity ? '-' : group.priceMin === group.priceMax ? EURO.format(group.priceMin) : `${EURO.format(group.priceMin)} - ${EURO.format(group.priceMax)}`],
+    ['MSRP', group.msrpMin === Infinity ? '-' : group.msrpMin === group.msrpMax ? EURO.format(group.msrpMin) : `${EURO.format(group.msrpMin)} - ${EURO.format(group.msrpMax)}`],
+    ['Packs', group.packs ? INT.format(group.packs) : '-'],
+    ['Alerts', issueCount ? INT.format(issueCount) : '-']
   ];
-  const cards = variants.map((row) => `
-    <article class="variant-card">
-      <div class="variant-card-top">
-        <strong>${escapeHtml(row.option2_value || '-')}</strong>
-        ${renderPack(row)}
-      </div>
-      <div class="variant-card-line"><span>Color</span><b>${escapeHtml(row.option1_value || '-')}</b></div>
-      <div class="variant-card-line"><span>SKU</span><b>${escapeHtml(row.variant_sku || '-')}</b></div>
-      <div class="variant-card-line"><span>EAN</span><b>${row.eanStatus === 'valid' ? escapeHtml(row.barcode) : renderBarcode(row)}</b></div>
-      <div class="variant-card-values">
-        <span>Cost ${row.cost ? EURO.format(row.cost) : '-'}</span>
-        <span>MSRP ${row.msrp ? EURO.format(row.msrp) : '-'}</span>
-      </div>
-      <div class="variant-card-bottom">
-        <span class="badge ${row.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(row.stock)}</span>
-        <span class="badge ${row.pricingStatus === 'Ready' ? 'active' : 'attention'}">${escapeHtml(row.pricingStatus)}</span>
-      </div>
-    </article>
-  `).join('');
-  return `<tr class="variant-detail-row"><td colspan="12"><div class="product-drawer"><div class="drawer-summary">${summary.map(([label, value]) => `<div><span>${label}</span><strong>${INT.format(value)}</strong></div>`).join('')}</div><div class="variant-grid">${cards}</div></div></td></tr>`;
+  const rows = variants.map((row) => `<tr><td><strong>${escapeHtml(row.option2_value || '-')}</strong>${colors.length > 1 ? `<span>${escapeHtml(row.option1_value || '-')}</span>` : ''}</td><td>${row.eanStatus === 'valid' ? escapeHtml(row.barcode) : renderBarcode(row)}</td><td><span class="badge ${row.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(row.stock)}</span></td><td>${row.isPack ? `<span class="badge attention">${INT.format(row.packQuantity)}x</span>` : '-'}</td><td><span class="badge ${row.pricingStatus === 'Ready' ? 'active' : 'attention'}">${escapeHtml(row.pricingStatus)}</span></td></tr>`).join('');
+  return `<tr class="variant-detail-row"><td colspan="7"><div class="product-drawer compact-drawer"><div class="drawer-summary">${summary.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('')}</div><div class="size-matrix"><table><thead><tr><th>Size</th><th>EAN</th><th>Stock</th><th>Pack</th><th>Pricing</th></tr></thead><tbody>${rows}</tbody></table></div></div></td></tr>`;
+}
+
+function renderColorSwatches(colors) {
+  if (!colors.length) return '-';
+  const visible = colors.slice(0, 3).map((color) => `<span>${escapeHtml(color)}</span>`).join('');
+  const extra = colors.length > 3 ? `<em>+${INT.format(colors.length - 3)}</em>` : '';
+  return `<div class="color-list">${visible}${extra}</div>`;
 }
 
 function renderPack(row) {
