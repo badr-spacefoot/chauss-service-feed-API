@@ -1,6 +1,6 @@
-const DASHBOARD_VERSION = '2026-06-24-chauss-service-api-quality';
+const DASHBOARD_VERSION = '2026-06-25-chauss-service-b2b-fields';
 const ACTIONS_WORKFLOW_RUNS_URL = 'https://api.github.com/repos/badr-spacefoot/chauss-service-feed-API/actions/workflows/generate-feed.yml/runs?branch=main&per_page=1';
-const REQUIRED_FIELDS = ['variant_sku', 'price_amount', 'product_type'];
+const REQUIRED_FIELDS = ['brand', 'variant_sku', 'barcode', 'option1_value', 'option2_value', 'cost_amount', 'product_type'];
 const EURO = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' });
 const INT = new Intl.NumberFormat('en-US');
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -193,9 +193,17 @@ async function loadCsvText() {
 function normalizeRow(row) {
   const normalized = Object.fromEntries(Object.entries(row).map(([key, value]) => [key, clean(value)]));
   normalized.stock = toNumber(normalized.inventory_available);
-  normalized.price = toNumber(normalized.price_amount);
+  normalized.cost = toNumber(normalized.cost_amount || normalized.price_amount);
+  normalized.price = normalized.cost;
+  normalized.msrp = toNumber(normalized.msrp_amount || normalized.compare_at_price);
+  normalized.packQuantity = Math.max(1, toNumber(normalized.pack_quantity) || 1);
+  normalized.isPack = clean(normalized.is_pack).toLowerCase() === 'true' || normalized.packQuantity > 1;
   normalized.status = clean(normalized.product_status).toUpperCase() || 'UNKNOWN';
   normalized.productType = typeName(normalized);
+  normalized.brandName = clean(normalized.brand) || 'Unbranded';
+  normalized.genderName = clean(normalized.gender) || 'Unspecified';
+  normalized.ageGroup = clean(normalized.age_group) || 'Unspecified';
+  normalized.usageName = clean(normalized.usage) || 'Unspecified';
   normalized.normalizedBarcode = normalizeBarcode(normalized.barcode);
   normalized.eanStatus = getEanStatus(normalized.barcode);
   normalized.updatedDate = normalized.updated_at ? new Date(normalized.updated_at) : null;
@@ -204,27 +212,27 @@ function normalizeRow(row) {
 }
 
 function renderDashboard(metadata) {
-  const dashboardRows = getScopedRows(state.rows);
+  const dashboardRows = state.rows;
   const stats = calculateStats(dashboardRows);
   const allStats = calculateStats(state.rows);
-  text('scopeSummary', `${scopeLabel()} view: ${INT.format(stats.totalProducts)} products and ${INT.format(stats.totalVariants)} variants. Full feed: ${INT.format(allStats.totalProducts)} products and ${INT.format(allStats.totalVariants)} variants.`);
+  text('scopeSummary', `${INT.format(stats.totalProducts)} permanent products and ${INT.format(stats.totalVariants)} sellable variants. Full feed: ${INT.format(allStats.totalProducts)} products and ${INT.format(allStats.totalVariants)} variants.`);
   text('totalProducts', INT.format(stats.totalProducts));
   text('totalVariants', INT.format(stats.totalVariants));
-  text('activeVariants', INT.format(stats.activeVariants));
-  text('draftVariants', INT.format(stats.archivedVariants));
+  text('activeVariants', INT.format(stats.packVariants));
+  text('draftVariants', stats.averageCost ? EURO.format(stats.averageCost) : '-');
   text('totalStock', INT.format(stats.totalStock));
   text('variantsWithStock', INT.format(stats.variantsWithStock));
-  text('badEans', INT.format(stats.missing.barcode));
+  text('badEans', stats.averageMsrp ? EURO.format(stats.averageMsrp) : '-');
   text('qualityScore', `${stats.qualityScore}%`);
   text('missingBarcode', INT.format(stats.missing.barcode));
   text('badEansDetail', INT.format(stats.badEans));
-  text('missingImage', INT.format(stats.missing.image_url));
-  text('missingPrice', INT.format(stats.missing.price_amount));
+  text('missingImage', INT.format(stats.missing.option2_value));
+  text('missingPrice', INT.format(stats.missing.cost_amount));
   text('missingStock', INT.format(stats.missingStock));
   text('outOfStockDetail', INT.format(stats.variantsOutOfStock));
   text('missingProductType', INT.format(stats.missing.product_type));
-  text('missingSeoTitle', INT.format(stats.missing.seo_title));
-  text('missingSeoDescription', INT.format(stats.missing.seo_description));
+  text('missingSeoTitle', INT.format(stats.missing.brand));
+  text('missingSeoDescription', INT.format(stats.missing.option1_value));
   text('negativeStock', INT.format(stats.negativeStockVariants));
   const lastGenerated = metadata?.generatedAt ? new Date(metadata.generatedAt) : stats.lastUpdated;
   text('lastUpdated', lastGenerated ? `Last CSV update: ${lastGenerated.toLocaleString()}` : 'Last CSV update: unavailable');
@@ -233,9 +241,9 @@ function renderDashboard(metadata) {
   state.productHistorySnapshots = normalizeProductHistory([...state.productHistory, buildCurrentProductSnapshot(dashboardRows, metadata)]);
   renderTimeBoundSections();
   renderProductTypes(stats.productTypes);
+  renderBrandBreakdown(stats.brands);
   renderRecentUpdates(dashboardRows);
   renderStockWatch(stats.stockWatch);
-  renderSeoWatch(stats.seoWatch);
   populateFilters(dashboardRows);
   applyFilters();
 }
@@ -249,13 +257,18 @@ function calculateStats(rows) {
   const totalStock = variants.reduce((sum, row) => sum + row.stock, 0);
   const variantsWithStock = variants.filter((row) => row.stock > 0).length;
   const variantsOutOfStock = variants.length - variantsWithStock;
-  const missing = Object.fromEntries([...REQUIRED_FIELDS, 'barcode', 'seo_title', 'seo_description'].map((field) => [field, variants.filter((row) => !isPresent(row[field])).length]));
+  const missing = Object.fromEntries(REQUIRED_FIELDS.map((field) => [field, variants.filter((row) => !isPresent(row[field])).length]));
   const badEans = variants.filter((row) => row.eanStatus === 'bad').length;
   const validRequiredFields = variants.reduce((sum, row) => sum + REQUIRED_FIELDS.filter((field) => isPresent(row[field])).length, 0);
   const totalRequiredFields = variants.length * REQUIRED_FIELDS.length;
   const qualityScore = totalRequiredFields ? Math.round((validRequiredFields / totalRequiredFields) * 100) : 0;
   const missingStock = variants.filter((row) => !isPresent(row.inventory_available)).length;
   const negativeStockVariants = variants.filter((row) => row.stock < 0).length;
+  const packVariants = variants.filter((row) => row.isPack).length;
+  const costRows = variants.filter((row) => row.cost > 0);
+  const msrpRows = variants.filter((row) => row.msrp > 0);
+  const averageCost = costRows.length ? costRows.reduce((sum, row) => sum + row.cost, 0) / costRows.length : 0;
+  const averageMsrp = msrpRows.length ? msrpRows.reduce((sum, row) => sum + row.msrp, 0) / msrpRows.length : 0;
   const lastUpdated = variants.map((row) => row.updatedDate).filter(Boolean).sort((a, b) => b - a)[0] ?? null;
   return {
     totalProducts: products.size,
@@ -266,28 +279,29 @@ function calculateStats(rows) {
     totalStock,
     variantsWithStock,
     variantsOutOfStock,
+    packVariants,
+    averageCost,
+    averageMsrp,
     missing,
     missingStock,
     badEans,
     negativeStockVariants,
     qualityScore,
     productTypes: groupProductTypes(variants),
+    brands: groupByDimension(variants, 'brandName', 'brand'),
+    usages: groupByDimension(variants, 'usageName', 'usage'),
     priceBuckets: buildPriceBuckets(variants),
     stockWatch: buildStockWatch(variants),
-    seoWatch: buildSeoWatch(variants),
     lastUpdated
   };
 }
 
 function getScopedRows(rows) {
-  if (state.statusScope === 'ALL') return rows;
-  return rows.filter((row) => row.status === state.statusScope);
+  return rows;
 }
 
 function scopeLabel() {
-  if (state.statusScope === 'ALL') return 'All statuses';
-  if (state.statusScope === 'ARCHIVED') return 'Archived';
-  return 'Active';
+  return 'All variants';
 }
 
 function uniqueRows(rows, keyFn) {
@@ -319,12 +333,27 @@ function buildPriceBuckets(rows) {
   return buckets;
 }
 
+function groupByDimension(rows, key, labelKey) {
+  const groups = new Map();
+  for (const row of rows) {
+    const label = clean(row[key]) || 'Unspecified';
+    const entry = groups.get(label) ?? { [labelKey]: label, variants: 0, stock: 0, priceSum: 0, priced: 0 };
+    entry.variants += 1;
+    entry.stock += row.stock;
+    if (row.cost > 0) { entry.priceSum += row.cost; entry.priced += 1; }
+    groups.set(label, entry);
+  }
+  return [...groups.values()]
+    .map((entry) => ({ ...entry, averagePrice: entry.priced ? entry.priceSum / entry.priced : 0 }))
+    .sort((a, b) => b.variants - a.variants || b.stock - a.stock);
+}
+
 function buildStockWatch(rows) {
   const products = new Map();
   for (const row of rows) {
     const key = productKey(row);
     if (!key) continue;
-    const product = products.get(key) ?? { title: row.product_title, url: row.product_url, productType: row.productType, stock: 0, variants: 0, negativeVariants: 0, outVariants: 0 };
+    const product = products.get(key) ?? { title: row.product_title, url: row.product_url, brand: row.brandName, productType: row.productType, stock: 0, variants: 0, negativeVariants: 0, outVariants: 0 };
     product.stock += row.stock;
     product.variants += 1;
     if (row.stock < 0) product.negativeVariants += 1;
@@ -337,35 +366,16 @@ function buildStockWatch(rows) {
     .slice(0, 12);
 }
 
-function buildSeoWatch(rows) {
-  const products = new Map();
-  for (const row of rows) {
-    const key = productKey(row);
-    if (!key || products.has(key)) continue;
-    const missingTitle = !isPresent(row.seo_title);
-    const missingDescription = !isPresent(row.seo_description);
-    if (!missingTitle && !missingDescription) continue;
-    products.set(key, {
-      title: row.product_title,
-      url: row.product_url,
-      productType: row.productType,
-      missingTitle,
-      missingDescription
-    });
-  }
-  return [...products.values()]
-    .sort((a, b) => Number(b.missingTitle && b.missingDescription) - Number(a.missingTitle && a.missingDescription) || a.title.localeCompare(b.title))
-    .slice(0, 12);
-}
-
 function renderCharts(stats) {
   destroyCharts(['status', 'stock', 'prices', 'missing']);
   const colors = ['#376b5d', '#d78f7a', '#6f91a8', '#9f7c54', '#8c9b6f', '#b76f89', '#5f8f86', '#d8b066'];
-  state.charts.status = new Chart(el('statusChart'), { type: 'doughnut', data: { labels: ['Active', 'Archived', 'Draft/other'], datasets: [{ data: [stats.activeVariants, stats.archivedVariants, Math.max(0, stats.totalVariants - stats.activeVariants - stats.archivedVariants)], backgroundColor: ['#376b5d', '#b8b6a7', '#d8b066'], borderWidth: 0 }] }, options: chartOptions() });
+  const topBrands = stats.brands.slice(0, 8);
+  state.charts.status = new Chart(el('statusChart'), { type: 'doughnut', data: { labels: topBrands.map((item) => item.brand), datasets: [{ data: topBrands.map((item) => item.variants), backgroundColor: colors, borderWidth: 0 }] }, options: chartOptions() });
   const topStockTypes = stats.productTypes.slice(0, 8);
   state.charts.stock = new Chart(el('stockTypeChart'), { type: 'bar', data: { labels: topStockTypes.map((item) => item.type), datasets: [{ label: 'Available stock', data: topStockTypes.map((item) => item.stock), backgroundColor: colors }] }, options: chartOptions({ indexAxis: 'y' }) });
   state.charts.prices = new Chart(el('priceChart'), { type: 'bar', data: { labels: stats.priceBuckets.map((bucket) => bucket.label), datasets: [{ label: 'Variants', data: stats.priceBuckets.map((bucket) => bucket.count), backgroundColor: '#6f91a8' }] }, options: chartOptions() });
-  state.charts.missing = new Chart(el('missingChart'), { type: 'bar', data: { labels: ['Missing SKU', 'Missing barcode', 'Missing SEO title', 'Missing SEO desc.', 'Missing stock', 'Missing type'], datasets: [{ label: 'Variants', data: [stats.missing.variant_sku, stats.missing.barcode, stats.missing.seo_title, stats.missing.seo_description, stats.missingStock, stats.missing.product_type], backgroundColor: '#d78f7a' }] }, options: chartOptions() });
+  const topUsages = stats.usages.slice(0, 8);
+  state.charts.missing = new Chart(el('missingChart'), { type: 'bar', data: { labels: topUsages.map((item) => item.usage), datasets: [{ label: 'Variants', data: topUsages.map((item) => item.variants), backgroundColor: colors }] }, options: chartOptions({ indexAxis: 'y' }) });
 }
 
 function buildCurrentSnapshot(stats, metadata) {
@@ -611,25 +621,26 @@ function renderProductTypes(productTypes) {
   el('productTypesBody').innerHTML = rows || '<tr><td colspan="4">No product types found.</td></tr>';
 }
 
+function renderBrandBreakdown(brands) {
+  const rows = brands.slice(0, 12).map((item) => `<tr><td>${escapeHtml(item.brand)}</td><td>${INT.format(item.variants)}</td><td>${INT.format(item.stock)}</td><td>${item.averagePrice ? EURO.format(item.averagePrice) : '-'}</td></tr>`).join('');
+  el('brandBody').innerHTML = rows || '<tr><td colspan="4">No brands found.</td></tr>';
+}
+
 function renderRecentUpdates(rows) {
   const recent = uniqueRows(rows, variantKey).filter((row) => row.updatedDate).sort((a, b) => b.updatedDate - a.updatedDate).slice(0, 10);
-  el('recentUpdatesBody').innerHTML = recent.map((row) => `<tr><td>${row.updatedDate.toLocaleString()}</td><td>${escapeHtml(row.variant_sku || '-')}</td><td>${renderProductLink(row.product_title || '-', row.product_url)}</td><td>${INT.format(row.stock)}</td></tr>`).join('') || '<tr><td colspan="4">No update dates found.</td></tr>';
+  el('recentUpdatesBody').innerHTML = recent.map((row) => `<tr><td>${row.updatedDate.toLocaleString()}</td><td>${escapeHtml(row.variant_sku || '-')}</td><td>${escapeHtml(row.brandName)}</td><td>${renderProductLink(row.product_title || '-', row.product_url)}</td><td>${INT.format(row.stock)}</td></tr>`).join('') || '<tr><td colspan="5">No update dates found.</td></tr>';
 }
 
 function renderStockWatch(items) {
-  el('stockWatchBody').innerHTML = items.map((item) => `<tr><td>${renderProductLink(item.title || '-', item.url)}</td><td>${escapeHtml(item.productType || '-')}</td><td><span class="badge ${item.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(item.stock)}</span></td><td>${INT.format(item.outVariants)} / ${INT.format(item.variants)}</td></tr>`).join('') || '<tr><td colspan="4">No stock anomaly for this scope.</td></tr>';
-}
-
-function renderSeoWatch(items) {
-  el('seoWatchBody').innerHTML = items.map((item) => {
-    const missing = [item.missingTitle ? 'Title' : '', item.missingDescription ? 'Description' : ''].filter(Boolean).join(' + ');
-    return `<tr><td>${renderProductLink(item.title || '-', item.url)}</td><td>${escapeHtml(item.productType || '-')}</td><td><span class="badge attention">${escapeHtml(missing)}</span></td></tr>`;
-  }).join('') || '<tr><td colspan="3">No SEO gap for this scope.</td></tr>';
+  el('stockWatchBody').innerHTML = items.map((item) => `<tr><td>${renderProductLink(item.title || '-', item.url)}</td><td>${escapeHtml(item.brand || '-')}</td><td><span class="badge ${item.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(item.stock)}</span></td><td>${INT.format(item.outVariants)} / ${INT.format(item.variants)}</td></tr>`).join('') || '<tr><td colspan="4">No stock anomaly for this scope.</td></tr>';
 }
 
 function populateFilters(rows) {
-  setOptions(el('statusFilter'), [...new Set(rows.map((row) => row.status).filter(Boolean))].sort(), 'All statuses');
+  setOptions(el('brandFilter'), [...new Set(rows.map((row) => row.brandName).filter(Boolean))].sort(), 'All brands');
   setOptions(el('typeFilter'), [...new Set(rows.map((row) => row.productType).filter(Boolean))].sort(), 'All product types');
+  setOptions(el('genderFilter'), [...new Set(rows.map((row) => row.genderName).filter(Boolean))].sort(), 'All genders');
+  setOptions(el('ageFilter'), [...new Set(rows.map((row) => row.ageGroup).filter(Boolean))].sort(), 'All ages');
+  setOptions(el('usageFilter'), [...new Set(rows.map((row) => row.usageName).filter(Boolean))].sort(), 'All usages');
 }
 
 function setOptions(select, options, firstLabel) {
@@ -639,7 +650,7 @@ function setOptions(select, options, firstLabel) {
 }
 
 function bindFilters() {
-  ['searchInput', 'statusFilter', 'stockFilter', 'typeFilter', 'eanFilter'].forEach((id) => el(id).addEventListener('input', applyFilters));
+  ['searchInput', 'brandFilter', 'stockFilter', 'typeFilter', 'eanFilter', 'genderFilter', 'ageFilter', 'usageFilter', 'packFilter'].forEach((id) => el(id).addEventListener('input', applyFilters));
   el('pageSizeSelect').addEventListener('input', () => { const value = el('pageSizeSelect').value; state.pageSize = value === 'all' ? Infinity : toNumber(value); renderCatalogueTable(); });
   el('groupProductsToggle').addEventListener('change', (event) => { state.groupProducts = event.target.checked; state.expandedProducts.clear(); applyFilters(); });
 }
@@ -679,18 +690,26 @@ function bindGroupedRows() {
 
 function applyFilters() {
   const search = clean(el('searchInput').value).toLowerCase();
-  const status = el('statusFilter').value;
+  const brand = el('brandFilter').value;
   const stock = el('stockFilter').value;
   const type = el('typeFilter').value;
   const ean = el('eanFilter').value;
+  const gender = el('genderFilter').value;
+  const age = el('ageFilter').value;
+  const usage = el('usageFilter').value;
+  const pack = el('packFilter').value;
   const variants = uniqueRows(getScopedRows(state.rows), variantKey);
   state.filteredRows = variants.filter((row) => {
-    const matchesSearch = !search || [row.variant_sku, row.product_title, row.barcode, row.productType].some((value) => clean(value).toLowerCase().includes(search));
-    const matchesStatus = !status || row.status === status;
+    const matchesSearch = !search || [row.variant_sku, row.product_title, row.barcode, row.productType, row.brandName, row.option1_value, row.option2_value, row.usageName].some((value) => clean(value).toLowerCase().includes(search));
+    const matchesBrand = !brand || row.brandName === brand;
     const matchesStock = !stock || (stock === 'in' ? row.stock > 0 : row.stock <= 0);
     const matchesType = !type || row.productType === type;
     const matchesEan = !ean || row.eanStatus === ean;
-    return matchesSearch && matchesStatus && matchesStock && matchesType && matchesEan;
+    const matchesGender = !gender || row.genderName === gender;
+    const matchesAge = !age || row.ageGroup === age;
+    const matchesUsage = !usage || row.usageName === usage;
+    const matchesPack = !pack || (pack === 'pack' ? row.isPack : !row.isPack);
+    return matchesSearch && matchesBrand && matchesStock && matchesType && matchesEan && matchesGender && matchesAge && matchesUsage && matchesPack;
   });
   state.groupedRows = buildProductGroups(state.filteredRows);
   renderCatalogueTable();
@@ -706,10 +725,12 @@ function buildProductGroups(rows) {
   const groups = new Map();
   for (const row of rows) {
     const key = productKey(row) || variantKey(row);
-    const entry = groups.get(key) ?? { key, first: row, variants: [], stock: 0, priceMin: Infinity, priceMax: 0, badEans: 0 };
+    const entry = groups.get(key) ?? { key, first: row, variants: [], stock: 0, priceMin: Infinity, priceMax: 0, msrpMin: Infinity, msrpMax: 0, badEans: 0, packs: 0 };
     entry.variants.push(row);
     entry.stock += row.stock;
-    if (row.price > 0) { entry.priceMin = Math.min(entry.priceMin, row.price); entry.priceMax = Math.max(entry.priceMax, row.price); }
+    if (row.cost > 0) { entry.priceMin = Math.min(entry.priceMin, row.cost); entry.priceMax = Math.max(entry.priceMax, row.cost); }
+    if (row.msrp > 0) { entry.msrpMin = Math.min(entry.msrpMin, row.msrp); entry.msrpMax = Math.max(entry.msrpMax, row.msrp); }
+    if (row.isPack) entry.packs += 1;
     if (row.eanStatus === 'bad') entry.badEans += 1;
     groups.set(key, entry);
   }
@@ -724,9 +745,11 @@ function sortProductGroups(groups) {
 
 function groupSortValue(group, key) {
   if (key === 'stock') return group.stock;
-  if (key === 'price') return group.priceMin === Infinity ? 0 : group.priceMin;
+  if (key === 'cost') return group.priceMin === Infinity ? 0 : group.priceMin;
+  if (key === 'msrp') return group.msrpMin === Infinity ? 0 : group.msrpMin;
+  if (key === 'packQuantity') return group.packs;
   if (key === 'productType') return group.first.productType;
-  if (key === 'status') return group.first.status;
+  if (key === 'brand') return group.first.brandName;
   if (key === 'barcode') return group.badEans;
   if (key === 'variant_sku') return group.variants.length;
   return clean(group.first.product_title).toLowerCase();
@@ -739,8 +762,10 @@ function sortRows(rows) {
 }
 
 function sortValue(row, key) {
-  if (key === 'price' || key === 'stock') return row[key];
+  if (key === 'cost' || key === 'stock' || key === 'msrp' || key === 'packQuantity') return row[key];
   if (key === 'productType') return row.productType;
+  if (key === 'brand') return row.brandName;
+  if (key === 'usage') return row.usageName;
   return clean(row[key]).toLowerCase();
 }
 
@@ -762,25 +787,31 @@ function renderVariantTable() {
   const limit = Number.isFinite(state.pageSize) ? state.pageSize : sortedRows.length;
   const visible = sortedRows.slice(0, limit);
   text('filterSummary', `Showing ${INT.format(visible.length)} of ${INT.format(sortedRows.length)} matching variants${sortedRows.length > visible.length ? ` (first ${INT.format(limit)} shown)` : ''}.`);
-  el('variantsBody').innerHTML = visible.map(renderVariantRow).join('') || '<tr><td colspan="8">No variants match the selected filters.</td></tr>';
+  el('variantsBody').innerHTML = visible.map(renderVariantRow).join('') || '<tr><td colspan="12">No variants match the selected filters.</td></tr>';
 }
 
 function renderGroupedProductTable() {
   const limit = Number.isFinite(state.pageSize) ? state.pageSize : state.groupedRows.length;
   const visible = state.groupedRows.slice(0, limit);
   text('filterSummary', `Showing ${INT.format(visible.length)} of ${INT.format(state.groupedRows.length)} matching products. Click a product row to see sizes and EANs.`);
-  el('variantsBody').innerHTML = visible.map(renderProductGroup).join('') || '<tr><td colspan="8">No products match the selected filters.</td></tr>';
+  el('variantsBody').innerHTML = visible.map(renderProductGroup).join('') || '<tr><td colspan="12">No products match the selected filters.</td></tr>';
 }
 
 function renderVariantRow(row) {
-  return `<tr><td>${renderThumbnail(row)}</td><td>${escapeHtml(row.variant_sku || '-')}</td><td>${renderBarcode(row)}</td><td class="product-cell"><strong>${renderProductLink(row.product_title || '-', row.product_url)}</strong><span>${escapeHtml(row.product_handle || '')}</span></td><td>${escapeHtml(row.productType)}</td><td><span class="badge ${row.status.toLowerCase()}">${escapeHtml(row.status)}</span></td><td>${row.price ? EURO.format(row.price) : '-'}</td><td><span class="badge ${row.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(row.stock)}</span></td></tr>`;
+  return `<tr><td>${escapeHtml(row.variant_sku || '-')}</td><td>${renderBarcode(row)}</td><td>${escapeHtml(row.brandName)}</td><td class="product-cell"><strong>${renderProductLink(row.product_title || '-', row.product_url)}</strong><span>${escapeHtml([row.genderName, row.ageGroup].filter((item) => item && item !== 'Unspecified').join(' / '))}</span></td><td>${escapeHtml(row.option1_value || '-')}</td><td>${escapeHtml(row.option2_value || '-')}</td><td>${escapeHtml(row.productType)}</td><td>${escapeHtml(row.usageName)}</td><td>${row.cost ? EURO.format(row.cost) : '-'}</td><td>${row.msrp ? EURO.format(row.msrp) : '-'}</td><td>${renderPack(row)}</td><td><span class="badge ${row.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(row.stock)}</span></td></tr>`;
 }
 
 function renderProductGroup(group) {
   const expanded = state.expandedProducts.has(group.key);
   const priceText = group.priceMin === Infinity ? '-' : group.priceMin === group.priceMax ? EURO.format(group.priceMin) : `${EURO.format(group.priceMin)} - ${EURO.format(group.priceMax)}`;
-  const childRows = expanded ? group.variants.map((row) => `<tr class="variant-detail-row"><td></td><td>${escapeHtml(row.variant_sku || '-')}</td><td>${renderBarcode(row)}</td><td>${escapeHtml([row.option1_value, row.option2_value, row.option3_value].filter(Boolean).join(' / ') || row.product_title || '-')}</td><td>${escapeHtml(row.productType)}</td><td><span class="badge ${row.status.toLowerCase()}">${escapeHtml(row.status)}</span></td><td>${row.price ? EURO.format(row.price) : '-'}</td><td><span class="badge ${row.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(row.stock)}</span></td></tr>`).join('') : '';
-  return `<tr class="product-group-row"><td>${renderThumbnail(group.first)}</td><td><button class="expand-button" type="button" data-expand-product="${escapeAttribute(group.key)}">${expanded ? 'Hide' : 'Show'} ${INT.format(group.variants.length)}</button></td><td>${group.badEans ? `<span class="ean-pill ean-bad">${INT.format(group.badEans)} bad EAN</span>` : '<span class="ean-pill ean-valid">EAN OK</span>'}</td><td class="product-cell"><strong>${renderProductLink(group.first.product_title || '-', group.first.product_url)}</strong><span>${escapeHtml(group.first.product_handle || '')}</span></td><td>${escapeHtml(group.first.productType)}</td><td><span class="badge ${group.first.status.toLowerCase()}">${escapeHtml(group.first.status)}</span></td><td>${priceText}</td><td><span class="badge ${group.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(group.stock)}</span></td></tr>${childRows}`;
+  const msrpText = group.msrpMin === Infinity ? '-' : group.msrpMin === group.msrpMax ? EURO.format(group.msrpMin) : `${EURO.format(group.msrpMin)} - ${EURO.format(group.msrpMax)}`;
+  const childRows = expanded ? group.variants.map(renderVariantRow).join('') : '';
+  return `<tr class="product-group-row"><td><button class="expand-button" type="button" data-expand-product="${escapeAttribute(group.key)}">${expanded ? 'Hide' : 'Show'} ${INT.format(group.variants.length)}</button></td><td>${group.badEans ? `<span class="ean-pill ean-bad">${INT.format(group.badEans)} bad EAN</span>` : '<span class="ean-pill ean-valid">EAN OK</span>'}</td><td>${escapeHtml(group.first.brandName)}</td><td class="product-cell"><strong>${renderProductLink(group.first.product_title || '-', group.first.product_url)}</strong><span>${escapeHtml(group.first.product_handle || '')}</span></td><td>-</td><td>-</td><td>${escapeHtml(group.first.productType)}</td><td>${escapeHtml(group.first.usageName)}</td><td>${priceText}</td><td>${msrpText}</td><td>${group.packs ? `${INT.format(group.packs)} packs` : '-'}</td><td><span class="badge ${group.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(group.stock)}</span></td></tr>${childRows}`;
+}
+
+function renderPack(row) {
+  if (!row.isPack) return '-';
+  return `<span class="badge attention">${INT.format(row.packQuantity)}x</span>`;
 }
 
 function renderProductLink(label, url) {
@@ -795,13 +826,6 @@ function renderBarcode(row) {
   const badgeClass = row.eanStatus === 'valid' ? 'ean-valid' : 'ean-bad';
   const label = row.eanStatus === 'valid' ? 'Valid EAN' : 'Bad EAN';
   return `<span>${escapeHtml(row.barcode)}</span><span class="ean-pill ${badgeClass}">${label}</span>`;
-}
-
-function renderThumbnail(row) {
-  const src = clean(row.image_url);
-  if (!src) return '<div class="product-thumb empty" aria-label="No image">No image</div>';
-  const title = escapeHtml(row.product_title || row.variant_sku || 'Product image');
-  return `<a class="product-thumb" href="${escapeAttribute(src)}" target="_blank" rel="noopener"><img src="${escapeAttribute(src)}" alt="${title}" loading="lazy" onerror="this.closest('a').classList.add('empty'); this.remove();" /></a>`;
 }
 
 function getEanStatus(value) { const barcode = normalizeBarcode(value); if (!barcode) return 'missing'; return isValidEan(barcode) ? 'valid' : 'bad'; }
@@ -820,12 +844,12 @@ function renderEmptyState() {
   text('scopeSummary', 'No feed data available.');
   text('timeRangeSummary', 'No snapshots available.');
   el('stockWatchBody').innerHTML = '<tr><td colspan="4">No data available.</td></tr>';
-  el('seoWatchBody').innerHTML = '<tr><td colspan="3">No data available.</td></tr>';
+  el('brandBody').innerHTML = '<tr><td colspan="4">No data available.</td></tr>';
   el('productTypesBody').innerHTML = '<tr><td colspan="4">No data available.</td></tr>';
-  el('recentUpdatesBody').innerHTML = '<tr><td colspan="4">No data available.</td></tr>';
+  el('recentUpdatesBody').innerHTML = '<tr><td colspan="5">No data available.</td></tr>';
   el('newProductsBody').innerHTML = '<tr><td colspan="4">No data available.</td></tr>';
   el('stockMoversBody').innerHTML = '<tr><td colspan="4">No data available.</td></tr>';
-  el('variantsBody').innerHTML = '<tr><td colspan="8">No data available.</td></tr>';
+  el('variantsBody').innerHTML = '<tr><td colspan="12">No data available.</td></tr>';
   el('historyBody').innerHTML = '<tr><td colspan="5">No history available.</td></tr>';
   destroyCharts();
 }

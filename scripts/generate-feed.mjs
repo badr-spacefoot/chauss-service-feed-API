@@ -5,7 +5,7 @@ import { generateFeed } from '../src/feed.js';
 
 dotenv.config();
 
-const REQUIRED_FIELDS = ['variant_sku', 'barcode', 'price_amount', 'product_type'];
+const REQUIRED_FIELDS = ['brand', 'variant_sku', 'barcode', 'option1_value', 'option2_value', 'cost_amount', 'product_type'];
 const outputDir = path.resolve('public');
 const feedPath = path.join(outputDir, 'feed.csv');
 const metadataPath = path.join(outputDir, 'feed-meta.json');

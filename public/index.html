@@ -8,9 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
     <script src="app.js" defer></script>
-    <script src="msrp-fix.js" defer></script>
     <script src="github-status-fallback.js" defer></script>
-    <script src="quality-drilldown.js" defer></script>
   </head>
   <body>
     <div class="page-shell">
@@ -40,43 +38,38 @@
       <main>
         <section class="scope-bar" aria-label="Catalog scope">
           <div>
-            <strong>Catalog scope</strong>
-            <span id="scopeSummary">Active view loading...</span>
-          </div>
-          <div class="segmented-control">
-            <button class="active" type="button" data-status-scope="ACTIVE">Active</button>
-            <button type="button" data-status-scope="ALL">All</button>
-            <button type="button" data-status-scope="ARCHIVED">Archived</button>
+            <strong>Permanent assortment feed</strong>
+            <span id="scopeSummary">Catalog loading...</span>
           </div>
         </section>
 
         <section class="kpi-grid" aria-label="Catalog KPIs">
           <article class="kpi-card"><span>Products in view</span><strong id="totalProducts">-</strong></article>
           <article class="kpi-card"><span>Variants in view</span><strong id="totalVariants">-</strong></article>
-          <article class="kpi-card"><span>Active variants</span><strong id="activeVariants">-</strong></article>
-          <article class="kpi-card"><span>Archived variants</span><strong id="draftVariants">-</strong></article>
+          <article class="kpi-card"><span>Pack variants</span><strong id="activeVariants">-</strong></article>
+          <article class="kpi-card"><span>Average cost</span><strong id="draftVariants">-</strong></article>
           <article class="kpi-card"><span>Total available stock</span><strong id="totalStock">-</strong></article>
           <article class="kpi-card"><span>Variants with stock</span><strong id="variantsWithStock">-</strong></article>
-          <article class="kpi-card"><span>Missing barcodes</span><strong id="badEans">-</strong></article>
+          <article class="kpi-card"><span>Average MSRP</span><strong id="badEans">-</strong></article>
           <article class="kpi-card score"><span>Feed quality score</span><strong id="qualityScore">-</strong></article>
         </section>
 
         <section class="dashboard-grid charts-grid" aria-label="Catalog charts">
-          <article class="panel chart-panel"><div class="panel-heading"><h2>Active vs Draft</h2><p>Variant status split</p></div><canvas id="statusChart"></canvas></article>
+          <article class="panel chart-panel"><div class="panel-heading"><h2>Brand Mix</h2><p>Variants by brand</p></div><canvas id="statusChart"></canvas></article>
           <article class="panel chart-panel"><div class="panel-heading"><h2>Stock by product type</h2><p>Available units by category</p></div><canvas id="stockTypeChart"></canvas></article>
-          <article class="panel chart-panel"><div class="panel-heading"><h2>Price distribution</h2><p>Variant price in EUR</p></div><canvas id="priceChart"></canvas></article>
-          <article class="panel chart-panel"><div class="panel-heading"><h2>Missing / invalid data</h2><p>Required feed fields, price, and EAN checks</p></div><canvas id="missingChart"></canvas></article>
+          <article class="panel chart-panel"><div class="panel-heading"><h2>Cost Distribution</h2><p>Variant cost in EUR</p></div><canvas id="priceChart"></canvas></article>
+          <article class="panel chart-panel"><div class="panel-heading"><h2>Usage Mix</h2><p>Variants by intended use</p></div><canvas id="missingChart"></canvas></article>
         </section>
 
         <section class="dashboard-grid two-column">
           <article class="panel">
             <div class="panel-heading"><h2>Stock Watch</h2><p>Products that need stock attention</p></div>
-            <div class="table-wrap small-table"><table><thead><tr><th>Product</th><th>Type</th><th>Stock</th><th>Out variants</th></tr></thead><tbody id="stockWatchBody"><tr><td colspan="4">Loading...</td></tr></tbody></table></div>
+            <div class="table-wrap small-table"><table><thead><tr><th>Product</th><th>Brand</th><th>Stock</th><th>Out variants</th></tr></thead><tbody id="stockWatchBody"><tr><td colspan="4">Loading...</td></tr></tbody></table></div>
           </article>
 
           <article class="panel">
-            <div class="panel-heading"><h2>SEO Watch</h2><p>Products missing search metadata</p></div>
-            <div class="table-wrap small-table"><table><thead><tr><th>Product</th><th>Type</th><th>Missing</th></tr></thead><tbody id="seoWatchBody"><tr><td colspan="3">Loading...</td></tr></tbody></table></div>
+            <div class="panel-heading"><h2>Brand Breakdown</h2><p>Variants, stock, and average cost by brand</p></div>
+            <div class="table-wrap small-table"><table><thead><tr><th>Brand</th><th>Variants</th><th>Stock</th><th>Avg cost</th></tr></thead><tbody id="brandBody"><tr><td colspan="4">Loading...</td></tr></tbody></table></div>
           </article>
         </section>
 
@@ -138,10 +131,10 @@
             <div class="quality-list">
               <div><span>Missing barcode</span><strong id="missingBarcode">-</strong></div>
               <div><span>Bad EAN barcode</span><strong id="badEansDetail">-</strong></div>
-              <div><span>Missing SEO title</span><strong id="missingSeoTitle">-</strong></div>
-              <div><span>Missing SEO description</span><strong id="missingSeoDescription">-</strong></div>
-              <div><span>Missing image</span><strong id="missingImage">-</strong></div>
-              <div><span>Missing price</span><strong id="missingPrice">-</strong></div>
+              <div><span>Missing brand</span><strong id="missingSeoTitle">-</strong></div>
+              <div><span>Missing color</span><strong id="missingSeoDescription">-</strong></div>
+              <div><span>Missing size</span><strong id="missingImage">-</strong></div>
+              <div><span>Missing cost</span><strong id="missingPrice">-</strong></div>
               <div><span>Missing stock value</span><strong id="missingStock">-</strong></div>
               <div><span>Negative stock variants</span><strong id="negativeStock">-</strong></div>
               <div><span>Out of stock variants</span><strong id="outOfStockDetail">-</strong></div>
@@ -151,7 +144,7 @@
 
           <article class="panel">
             <div class="panel-heading"><h2>Recent Updates</h2><p>Last 10 updated products / variants</p></div>
-            <div class="table-wrap small-table"><table><thead><tr><th>Updated</th><th>SKU</th><th>Product</th><th>Stock</th></tr></thead><tbody id="recentUpdatesBody"><tr><td colspan="4">Loading...</td></tr></tbody></table></div>
+            <div class="table-wrap small-table"><table><thead><tr><th>Updated</th><th>SKU</th><th>Brand</th><th>Product</th><th>Stock</th></tr></thead><tbody id="recentUpdatesBody"><tr><td colspan="5">Loading...</td></tr></tbody></table></div>
           </article>
         </section>
 
@@ -168,18 +161,22 @@
         </section>
 
         <section class="panel">
-          <div class="panel-heading"><h2>Top Product Types</h2><p>Variant count, stock, and average price</p></div>
-          <div class="table-wrap"><table><thead><tr><th>Product type</th><th>Variants</th><th>Total stock</th><th>Average price</th></tr></thead><tbody id="productTypesBody"><tr><td colspan="4">Loading...</td></tr></tbody></table></div>
+          <div class="panel-heading"><h2>Top Product Types</h2><p>Variant count, stock, and average cost</p></div>
+          <div class="table-wrap"><table><thead><tr><th>Product type</th><th>Variants</th><th>Total stock</th><th>Average cost</th></tr></thead><tbody id="productTypesBody"><tr><td colspan="4">Loading...</td></tr></tbody></table></div>
         </section>
 
         <section class="panel">
           <div class="panel-heading"><h2>Catalog Search</h2><p>Filter, sort, and inspect variants</p></div>
           <div class="filters catalog-controls">
             <label>Search<input id="searchInput" type="search" placeholder="SKU, title, barcode..." /></label>
-            <label>Status<select id="statusFilter"><option value="">All statuses</option></select></label>
+            <label>Brand<select id="brandFilter"><option value="">All brands</option></select></label>
             <label>Stock<select id="stockFilter"><option value="">All stock</option><option value="in">In stock</option><option value="out">Out of stock</option></select></label>
             <label>EAN<select id="eanFilter"><option value="">All barcodes</option><option value="valid">Valid EAN</option><option value="bad">Bad EAN</option><option value="missing">Missing barcode</option></select></label>
             <label>Product type<select id="typeFilter"><option value="">All product types</option></select></label>
+            <label>Gender<select id="genderFilter"><option value="">All genders</option></select></label>
+            <label>Age<select id="ageFilter"><option value="">All ages</option></select></label>
+            <label>Usage<select id="usageFilter"><option value="">All usages</option></select></label>
+            <label>Pack<select id="packFilter"><option value="">All variants</option><option value="pack">Packs only</option><option value="single">Singles only</option></select></label>
             <label>Rows<select id="pageSizeSelect"><option value="25">25 rows</option><option value="50">50 rows</option><option value="100" selected>100 rows</option><option value="250">250 rows</option><option value="all">All rows</option></select></label>
           </div>
           <div class="catalog-mode-row">
@@ -190,17 +187,21 @@
             <table>
               <thead>
                 <tr>
-                  <th>Image</th>
                   <th><button class="sort-button" type="button" data-sort="variant_sku">SKU</button></th>
                   <th><button class="sort-button" type="button" data-sort="barcode">Barcode</button></th>
+                  <th><button class="sort-button" type="button" data-sort="brand">Brand</button></th>
                   <th><button class="sort-button" type="button" data-sort="product_title">Product</button></th>
+                  <th><button class="sort-button" type="button" data-sort="option1_value">Color</button></th>
+                  <th><button class="sort-button" type="button" data-sort="option2_value">Size</button></th>
                   <th><button class="sort-button" type="button" data-sort="productType">Type</button></th>
-                  <th><button class="sort-button" type="button" data-sort="status">Status</button></th>
-                  <th><button class="sort-button" type="button" data-sort="price">Price</button></th>
+                  <th><button class="sort-button" type="button" data-sort="usage">Usage</button></th>
+                  <th><button class="sort-button" type="button" data-sort="cost">Cost</button></th>
+                  <th><button class="sort-button" type="button" data-sort="msrp">MSRP</button></th>
+                  <th><button class="sort-button" type="button" data-sort="packQuantity">Pack</button></th>
                   <th><button class="sort-button" type="button" data-sort="stock">Stock</button></th>
                 </tr>
               </thead>
-              <tbody id="variantsBody"><tr><td colspan="8">Loading...</td></tr></tbody>
+              <tbody id="variantsBody"><tr><td colspan="12">Loading...</td></tr></tbody>
             </table>
           </div>
         </section>

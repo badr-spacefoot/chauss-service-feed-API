@@ -23,8 +23,22 @@ export const CSV_COLUMNS = [
   'option3_name',
   'option3_value',
   'price_amount',
+  'cost_amount',
   'price_currency',
   'compare_at_price',
+  'msrp_amount',
+  'pack_quantity',
+  'cost_per_unit',
+  'msrp_per_unit',
+  'is_pack',
+  'gender',
+  'age_group',
+  'usage',
+  'construction',
+  'upper_material',
+  'lining_material',
+  'insole_material',
+  'outsole_material',
   'inventory_item_id',
   'inventory_tracked',
   'inventory_available',
@@ -123,6 +137,11 @@ function toCsvRow({ article, assortment, stockByBarcode, env }) {
   const color = clean(assortment?.couleur);
   const size = clean(assortment?.taille);
   const variantTitle = [color, size].filter(Boolean).join(' / ');
+  const costAmount = toNumberOrBlank(assortment?.pu_ht);
+  const msrpAmount = toNumberOrBlank(article.pvc_ttc);
+  const packQuantity = getPackQuantity(assortment);
+  const isPack = packQuantity > 1;
+  const audience = normalizeAudience(article.rayon);
 
   return {
     brand: clean(article.marque) || env.FEED_BRAND || 'Chauss Service',
@@ -135,7 +154,7 @@ function toCsvRow({ article, assortment, stockByBarcode, env }) {
     variant_id: barcode || [productId, color, size].filter(Boolean).join('-'),
     variant_gid: '',
     variant_title: variantTitle,
-    variant_sku: [productId, color, size].filter(Boolean).join('-'),
+    variant_sku: productId,
     barcode,
     option1_name: color ? 'Couleur' : '',
     option1_value: color,
@@ -143,9 +162,23 @@ function toCsvRow({ article, assortment, stockByBarcode, env }) {
     option2_value: size,
     option3_name: '',
     option3_value: '',
-    price_amount: formatNumber(assortment?.pu_ht),
+    price_amount: formatNumber(costAmount),
+    cost_amount: formatNumber(costAmount),
     price_currency: env.FEED_CURRENCY || 'EUR',
-    compare_at_price: formatNumber(article.pvc_ttc),
+    compare_at_price: formatNumber(msrpAmount),
+    msrp_amount: formatNumber(msrpAmount),
+    pack_quantity: packQuantity ? String(packQuantity) : '',
+    cost_per_unit: formatNumber(isPack && costAmount !== '' ? costAmount / packQuantity : costAmount),
+    msrp_per_unit: formatNumber(msrpAmount),
+    is_pack: isPack ? 'true' : 'false',
+    gender: audience.gender,
+    age_group: audience.ageGroup,
+    usage: clean(article.usage),
+    construction: clean(article.construction),
+    upper_material: clean(article.matieres?.tige),
+    lining_material: clean(article.matieres?.doublure),
+    insole_material: clean(article.matieres?.premiere),
+    outsole_material: clean(article.matieres?.semelle),
     inventory_item_id: barcode,
     inventory_tracked: barcode ? true : '',
     inventory_available: formatNumber(stock),
@@ -233,6 +266,28 @@ function buildMetafields(article, assortment) {
   };
 }
 
+function normalizeAudience(rayon) {
+  const value = clean(rayon).toLowerCase();
+  if (!value) return { gender: '', ageGroup: '' };
+  if (value.includes('enfant') || value.includes('kid')) return { gender: '', ageGroup: 'Kids' };
+  if (value.includes('bebe') || value.includes('bébé') || value.includes('baby')) return { gender: '', ageGroup: 'Baby' };
+  if (value.includes('femme') || value.includes('women')) return { gender: 'Women', ageGroup: 'Adult' };
+  if (value.includes('homme') || value.includes('men')) return { gender: 'Men', ageGroup: 'Adult' };
+  if (value.includes('mixte') || value.includes('unisex')) return { gender: 'Unisex', ageGroup: 'Adult' };
+  return { gender: clean(rayon), ageGroup: '' };
+}
+
+function getPackQuantity(assortment) {
+  const qteColis = toNumberOrBlank(assortment?.qteColis);
+  if (qteColis !== '' && qteColis > 1) return qteColis;
+
+  const size = clean(assortment?.taille).toUpperCase();
+  const packMatch = size.match(/^H(\d+)(?:L)?$/);
+  if (packMatch) return Number(packMatch[1]);
+
+  return 1;
+}
+
 function reportProgress(onProgress, progress) {
   if (typeof onProgress === 'function') {
     onProgress(progress);
@@ -245,8 +300,14 @@ function clean(value) {
 
 function formatNumber(value) {
   if (value === '' || value == null) return '';
-  const parsed = Number(String(value).replace(',', '.'));
+  const parsed = toNumberOrBlank(value);
   return Number.isFinite(parsed) ? String(parsed) : '';
+}
+
+function toNumberOrBlank(value) {
+  if (value === '' || value == null) return '';
+  const parsed = Number(String(value).replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : '';
 }
 
 function countUniqueProducts(rows) {

@@ -4,8 +4,8 @@ This repository publishes a Chauss Service B2B product feed as a static `feed.cs
 
 ## What It Provides
 
-- `feed.csv` with product, assortment, EAN, price, stock, material, and category columns.
-- A GitHub Pages dashboard for feed quality, stock, price distribution, product movement, and searchable variants.
+- `feed.csv` with product, brand, assortment, EAN, cost, MSRP, pack, stock, material, audience, usage, and category columns.
+- A GitHub Pages dashboard for feed quality, stock, cost distribution, product movement, and searchable variants.
 - GitHub Actions workflow that can run manually, on schedule, or after feed code changes.
 
 ## Required GitHub Secrets
@@ -57,4 +57,13 @@ The feed uses:
 - `GET /articles/{reference}` for article details and assortiments.
 - `GET /stocks` as an optional stock override by barcode.
 
-Chauss Service assortiments become dashboard variants. The variant barcode comes from `codebarre`, color from `couleur`, size from `taille`, B2B price from `pu_ht`, MSRP from `pvc_ttc`, and available stock from `/stocks` when present, otherwise from the article detail.
+Chauss Service assortiments become dashboard variants. The variant barcode comes from `codebarre`, color from `couleur`, size from `taille`, COST from `pu_ht`, MSRP from `pvc_ttc`, and available stock from `/stocks` when present, otherwise from the article detail.
+
+The feed keeps the historical `price_amount` and `compare_at_price` columns for compatibility, but also writes clearer fields:
+
+- `cost_amount` mirrors `price_amount`
+- `msrp_amount` mirrors `compare_at_price`
+- `variant_sku` is the Chauss Service `product_id`
+- `variant_id` remains the barcode/EAN so variants stay unique
+- `pack_quantity`, `cost_per_unit`, `msrp_per_unit`, and `is_pack` identify pack sizes such as `H8L`, `H10`, and `H12`
+- `brand`, `gender`, `age_group`, `usage`, `construction`, and material columns enrich filtering and analysis
