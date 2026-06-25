@@ -800,10 +800,10 @@ function renderCatalogHeader() {
   const head = document.querySelector('.catalog-table thead');
   table.classList.toggle('grouped-catalog', state.groupProducts);
   if (state.groupProducts) {
-    head.innerHTML = '<tr><th><button class="sort-button" type="button" data-sort="variant_sku">Variants</button></th><th><button class="sort-button" type="button" data-sort="product_title">Product</button></th><th><button class="sort-button" type="button" data-sort="brand">Brand</button></th><th><button class="sort-button" type="button" data-sort="productType">Type / Usage</button></th><th><button class="sort-button" type="button" data-sort="option1_value">Colors</button></th><th><button class="sort-button" type="button" data-sort="cost">Pricing</button></th><th><button class="sort-button" type="button" data-sort="stock">Stock</button></th></tr>';
+    head.innerHTML = '<tr><th><button class="sort-button" type="button" data-sort="product_title">Product</button></th><th><button class="sort-button" type="button" data-sort="variant_sku">Assortments</button></th><th><button class="sort-button" type="button" data-sort="brand">Brand</button></th><th><button class="sort-button" type="button" data-sort="productType">Type / Usage</button></th><th><button class="sort-button" type="button" data-sort="option1_value">Colors</button></th><th><button class="sort-button" type="button" data-sort="cost">Pricing</button></th><th><button class="sort-button" type="button" data-sort="stock">Stock</button></th></tr>';
     return;
   }
-  head.innerHTML = '<tr><th><button class="sort-button" type="button" data-sort="variant_sku">SKU</button></th><th><button class="sort-button" type="button" data-sort="barcode">Barcode</button></th><th><button class="sort-button" type="button" data-sort="brand">Brand</button></th><th><button class="sort-button" type="button" data-sort="product_title">Product</button></th><th><button class="sort-button" type="button" data-sort="option1_value">Color</button></th><th><button class="sort-button" type="button" data-sort="option2_value">Size</button></th><th><button class="sort-button" type="button" data-sort="productType">Type</button></th><th><button class="sort-button" type="button" data-sort="usage">Usage</button></th><th><button class="sort-button" type="button" data-sort="cost">Cost</button></th><th><button class="sort-button" type="button" data-sort="msrp">MSRP</button></th><th><button class="sort-button" type="button" data-sort="packQuantity">Pack</button></th><th><button class="sort-button" type="button" data-sort="stock">Stock</button></th></tr>';
+  head.innerHTML = '<tr><th><button class="sort-button" type="button" data-sort="product_title">Product</button></th><th><button class="sort-button" type="button" data-sort="variant_sku">Variant</button></th><th><button class="sort-button" type="button" data-sort="brand">Brand</button></th><th><button class="sort-button" type="button" data-sort="option2_value">Color / Size</button></th><th><button class="sort-button" type="button" data-sort="productType">Type / Usage</button></th><th><button class="sort-button" type="button" data-sort="cost">Pricing</button></th><th><button class="sort-button" type="button" data-sort="packQuantity">Pack</button></th><th><button class="sort-button" type="button" data-sort="stock">Stock</button></th></tr>';
 }
 
 function buildProductGroups(rows) {
@@ -875,7 +875,7 @@ function renderVariantTable() {
   const visible = sortedRows.slice(0, limit);
   text('filterSummary', `Showing ${INT.format(visible.length)} of ${INT.format(sortedRows.length)} matching variants${sortedRows.length > visible.length ? ` (first ${INT.format(limit)} shown)` : ''}.`);
   text('resultCount', `${INT.format(sortedRows.length)} variants`);
-  el('variantsBody').innerHTML = visible.map(renderVariantRow).join('') || '<tr><td colspan="12">No variants match the selected filters.</td></tr>';
+  el('variantsBody').innerHTML = visible.map(renderVariantRow).join('') || '<tr><td colspan="8">No variants match the selected filters.</td></tr>';
 }
 
 function matchesPricingFilter(row, pricing) {
@@ -895,7 +895,7 @@ function renderGroupedProductTable() {
 }
 
 function renderVariantRow(row) {
-  return `<tr><td>${escapeHtml(row.variant_sku || '-')}</td><td>${renderBarcode(row)}</td><td>${escapeHtml(row.brandName)}</td><td class="product-cell"><strong>${renderProductLink(row.product_title || '-', row.product_url)}</strong><span>${escapeHtml([row.genderName, row.ageGroup].filter((item) => item && item !== 'Unspecified').join(' / '))}</span></td><td>${escapeHtml(row.option1_value || '-')}</td><td>${escapeHtml(row.option2_value || '-')}</td><td>${escapeHtml(row.productType)}</td><td>${escapeHtml(row.usageName)}</td><td>${row.cost ? EURO.format(row.cost) : '-'}</td><td>${row.msrp ? EURO.format(row.msrp) : '-'}</td><td>${renderPack(row)}</td><td><span class="badge ${row.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(row.stock)}</span></td></tr>`;
+  return `<tr><td class="product-identity">${renderRowThumb(row)}<div><strong>${renderProductLink(row.product_title || '-', row.product_url)}</strong><span>${escapeHtml([row.product_id, row.genderName, row.ageGroup].filter((item) => item && item !== 'Unspecified').join(' / '))}</span></div></td><td class="stacked-cell"><strong>${escapeHtml(row.variant_sku || '-')}</strong>${renderBarcode(row)}</td><td>${escapeHtml(row.brandName)}</td><td class="stacked-cell"><strong>${escapeHtml(row.option1_value || '-')}</strong><span>${escapeHtml(row.option2_value || '-')}</span></td><td class="stacked-cell"><strong>${escapeHtml(row.productType)}</strong><span>${escapeHtml(row.usageName)}</span></td><td class="price-stack"><span>Cost ${row.cost ? EURO.format(row.cost) : '-'}</span><span>MSRP ${row.msrp ? EURO.format(row.msrp) : '-'}</span></td><td>${renderPack(row)}</td><td><span class="badge ${row.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(row.stock)}</span></td></tr>`;
 }
 
 function renderProductGroup(group) {
@@ -905,7 +905,7 @@ function renderProductGroup(group) {
   const detailRow = expanded ? renderProductDrawer(group) : '';
   const colors = [...new Set(group.variants.map((row) => row.option1_value).filter(Boolean))];
   const alertCount = group.variants.filter((row) => row.eanStatus !== 'valid' || row.pricingStatus !== 'Ready' || row.stock <= 0).length;
-  return `<tr class="product-group-row ${expanded ? 'expanded' : ''}"><td><button class="expand-button" type="button" data-expand-product="${escapeAttribute(group.key)}">${expanded ? 'Hide' : 'Show'} ${INT.format(group.variants.length)}</button>${alertCount ? `<span class="compact-alert">${INT.format(alertCount)} alerts</span>` : ''}</td><td class="product-identity">${renderProductThumb(group)}<div><strong>${renderProductLink(group.first.product_title || '-', group.first.product_url)}</strong><span>${escapeHtml([group.first.product_id, group.first.genderName, group.first.ageGroup].filter((item) => item && item !== 'Unspecified').join(' / '))}</span></div></td><td>${escapeHtml(group.first.brandName)}</td><td class="stacked-cell"><strong>${escapeHtml(group.first.productType)}</strong><span>${escapeHtml(group.first.usageName)}</span></td><td>${renderColorSwatches(colors)}</td><td class="price-stack"><span>Cost ${priceText}</span><span>MSRP ${msrpText}</span>${group.packs ? `<em>${INT.format(group.packs)} pack row${group.packs > 1 ? 's' : ''}</em>` : ''}</td><td><span class="badge ${group.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(group.stock)}</span></td></tr>${detailRow}`;
+  return `<tr class="product-group-row ${expanded ? 'expanded' : ''}"><td class="product-identity">${renderProductThumb(group)}<div><strong>${renderProductLink(group.first.product_title || '-', group.first.product_url)}</strong><span>${escapeHtml([group.first.product_id, group.first.genderName, group.first.ageGroup].filter((item) => item && item !== 'Unspecified').join(' / '))}</span></div></td><td><button class="expand-button" type="button" data-expand-product="${escapeAttribute(group.key)}">${expanded ? 'Hide' : 'Show'} ${INT.format(group.variants.length)}</button>${alertCount ? `<span class="compact-alert">${INT.format(alertCount)} alerts</span>` : ''}</td><td>${escapeHtml(group.first.brandName)}</td><td class="stacked-cell"><strong>${escapeHtml(group.first.productType)}</strong><span>${escapeHtml(group.first.usageName)}</span></td><td>${renderColorSwatches(colors)}</td><td class="price-stack"><span>Cost ${priceText}</span><span>MSRP ${msrpText}</span>${group.packs ? `<em>${INT.format(group.packs)} pack row${group.packs > 1 ? 's' : ''}</em>` : ''}</td><td><span class="badge ${group.stock > 0 ? 'stock-in' : 'stock-out'}">${INT.format(group.stock)}</span></td></tr>${detailRow}`;
 }
 
 function renderProductDrawer(group) {
@@ -1047,7 +1047,13 @@ function csvCell(value) {
 function renderProductThumb(group) {
   const url = clean(group.imageUrl || group.first?.imageUrl);
   if (!url) return '<span class="product-thumb empty">No image</span>';
-  return `<a class="product-thumb" href="${escapeAttribute(url)}" target="_blank" rel="noopener"><img src="${escapeAttribute(url)}" alt=""></a>`;
+  return `<a class="product-thumb" href="${escapeAttribute(url)}" target="_blank" rel="noopener"><img src="${escapeAttribute(url)}" alt="" loading="lazy" onerror="this.closest('.product-thumb').classList.add('image-missing'); this.remove();"></a>`;
+}
+
+function renderRowThumb(row) {
+  const url = clean(row.imageUrl);
+  if (!url) return '<span class="product-thumb empty">No image</span>';
+  return `<a class="product-thumb" href="${escapeAttribute(url)}" target="_blank" rel="noopener"><img src="${escapeAttribute(url)}" alt="" loading="lazy" onerror="this.closest('.product-thumb').classList.add('image-missing'); this.remove();"></a>`;
 }
 
 function updateSortButtonsStable() {
