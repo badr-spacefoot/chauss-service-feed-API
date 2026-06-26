@@ -793,6 +793,16 @@ function renderCatalogueTable() {
   renderCatalogHeader();
   if (state.groupProducts) renderGroupedProductTable();
   else renderVariantTable();
+  resetCatalogHorizontalScroll();
+}
+
+function resetCatalogHorizontalScroll() {
+  const wrapper = document.querySelector('.catalog-table');
+  if (!wrapper) return;
+  wrapper.scrollLeft = 0;
+  window.requestAnimationFrame(() => {
+    wrapper.scrollLeft = 0;
+  });
 }
 
 function renderCatalogHeader() {
